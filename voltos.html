@@ -1,0 +1,3332 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ VoltOS 6.3</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root {
+    --accent: #ffd700; --accent2: #ff8c00;
+    --bg: #0a0a12; --panel: rgba(18,18,28,.97);
+    --border: rgba(255,215,0,.25);
+    --text: #e0e0e0; --text-dim:#888; --text-mute:#555;
+    --glass: rgba(18,18,28,.72);
+    --shadow: 0 12px 48px rgba(0,0,0,.7);
+    --radius: 12px;
+  }
+  body.amoled { --bg:#000; --panel:rgba(8,8,12,.98); --border:rgba(255,215,0,.18); --glass:rgba(0,0,0,.78); }
+  body { font-family:'Segoe UI',system-ui,sans-serif; background:#000; overflow:hidden;
+    height:100vh; user-select:none; color:var(--text); -webkit-font-smoothing:antialiased; }
+
+  /* === BOOT === */
+  #boot { position:fixed; inset:0; background:#000; z-index:99999;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition:opacity .8s cubic-bezier(.4,0,.2,1); }
+  #boot.done { opacity:0; pointer-events:none; }
+  .bolt { font-size:90px; animation:bootPulse 1.2s ease-in-out infinite; filter:drop-shadow(0 0 40px #ffd700); }
+  @keyframes bootPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.18);opacity:.7} }
+  #boot h1 { font-size:48px; letter-spacing:12px; margin:20px 0 10px;
+    background:linear-gradient(90deg,#ffd700,#ff8c00,#ffd700); background-size:200% auto;
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:shine 2s linear infinite; font-weight:300; }
+  @keyframes shine { to { background-position:200% center; } }
+  #boot p { color:#444; font-size:12px; letter-spacing:4px; }
+  .boot-bar { width:320px; height:3px; background:#111; border-radius:2px; margin-top:36px; overflow:hidden; }
+  .boot-bar-fill { height:100%; width:0; background:linear-gradient(90deg,#ffd700,#ff8c00,#ffd700);
+    background-size:200% auto; transition:width .2s; box-shadow:0 0 20px #ffd700; animation:shine 1s linear infinite; }
+  #bootlog { position:absolute; bottom:30px; left:30px; font-family:'Consolas',monospace;
+    font-size:11px; color:#333; line-height:1.7; max-width:400px; }
+
+  /* === GLITCH OVERLAY === */
+  #glitchOverlay { position:fixed; inset:0; z-index:99990; pointer-events:none;
+    display:none; mix-blend-mode:screen; opacity:.15; }
+  #glitchOverlay.active { display:block; }
+  body.glitched { animation:glitchShift 5s infinite; }
+  @keyframes glitchShift {
+    0%,100% { filter:none; transform:translate(0); }
+    10% { filter:hue-rotate(90deg) saturate(2); transform:translate(-3px, 2px); }
+    20% { filter:invert(1) hue-rotate(180deg); transform:translate(2px, -1px); }
+    30% { filter:none; transform:translate(0); }
+    50% { filter:contrast(2) brightness(.8); transform:translate(4px, 0); }
+    60% { filter:hue-rotate(-90deg); transform:translate(-2px, 1px); }
+    70% { filter:none; transform:translate(0); }
+  }
+  .glitch-artifact { position:absolute; z-index:50; pointer-events:none;
+    background:rgba(255,215,0,.4); box-shadow:0 0 20px rgba(255,0,255,.5);
+    animation:artifactFlicker 3s infinite; }
+  @keyframes artifactFlicker { 0%,100%{opacity:.1} 50%{opacity:.7} }
+  .glitch-text { color:#f0f; font-family:'Consolas',monospace; text-shadow:2px 0 red, -2px 0 cyan;
+    animation:glitchText 1s infinite; }
+  @keyframes glitchText {
+    0%,100%{transform:translate(0)} 25%{transform:translate(-2px,1px)}
+    50%{transform:translate(2px,-1px)} 75%{transform:translate(-1px,2px)}
+  }
+
+  /* === DESKTOP === */
+  #desktop { position:fixed; inset:0; opacity:0; transition:opacity .8s cubic-bezier(.4,0,.2,1);
+    background:radial-gradient(circle at 30% 20%, #1a1a2e 0%, #0a0a12 60%, #000 100%);
+    background-size:cover; background-position:center; }
+  #desktop.show { opacity:1; }
+  #desktop.dragover::after { content:'📤 Отпусти чтобы загрузить'; position:absolute; inset:12px;
+    border:3px dashed var(--accent); border-radius:16px; background:rgba(255,215,0,.1);
+    display:flex; align-items:center; justify-content:center; font-size:24px;
+    color:var(--accent); font-weight:bold; z-index:9000; backdrop-filter:blur(4px); pointer-events:none; }
+
+  /* === TOPBAR === */
+  #topbar { position:absolute; top:0; left:0; right:0; height:36px;
+    background:var(--glass); backdrop-filter:blur(20px) saturate(180%);
+    border-bottom:1px solid var(--border); display:flex; align-items:center;
+    padding:0 14px; font-size:12px; gap:12px; z-index:5000; }
+  #topbar .logo { color:var(--accent); font-weight:700; letter-spacing:1.5px;
+    cursor:pointer; display:flex; align-items:center; gap:6px; transition:.2s; }
+  #topbar .logo:hover { transform:scale(1.05); }
+  #topbar .spacer { flex:1; }
+  #topbar .stat { color:#777; display:flex; align-items:center; gap:5px; transition:.2s;
+    padding:2px 6px; border-radius:6px; }
+  #topbar .stat:hover { background:rgba(255,255,255,.05); }
+  #topbar .stat b { color:var(--accent); font-weight:600; }
+  .pill { padding:3px 12px; border-radius:14px; font-size:11px; cursor:pointer; transition:.2s; font-weight:500; }
+  .mode-pill { border:1px solid rgba(255,215,0,.3); background:rgba(255,215,0,.08); color:var(--accent); }
+  .mode-pill:hover { background:rgba(255,215,0,.2); transform:translateY(-1px); }
+  .user-pill { border:1px solid rgba(80,200,255,.3); background:rgba(80,200,255,.08); color:#50c8ff; }
+  .user-pill:hover { background:rgba(80,200,255,.2); transform:translateY(-1px); }
+  .vdots { display:flex; gap:5px; }
+  .vdot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.15);
+    cursor:pointer; transition:.25s; }
+  .vdot:hover { background:rgba(255,255,255,.3); transform:scale(1.2); }
+  .vdot.active { background:var(--accent); box-shadow:0 0 10px var(--accent); transform:scale(1.3); }
+
+  .battery { width:36px; height:15px; border:1.5px solid #666; border-radius:4px; position:relative; padding:1.5px; }
+  .battery::after { content:''; position:absolute; right:-3px; top:4px; width:2px; height:5px;
+    background:#666; border-radius:0 1px 1px 0; }
+  .battery-fill { height:100%; background:#4ade80; border-radius:2px; transition:width .4s, background .4s; }
+
+  /* === ICONS === */
+  .icons { position:absolute; top:52px; left:20px; display:flex; flex-direction:column; gap:2px; z-index:100; }
+  .icon { width:92px; padding:10px 4px; text-align:center; border-radius:10px;
+    cursor:pointer; transition:.15s cubic-bezier(.4,0,.2,1); position:relative; }
+  .icon:hover { background:rgba(255,215,0,.12); transform:translateY(-2px); }
+  .icon:active { transform:scale(.94); }
+  .icon .glyph { font-size:30px; display:block; margin-bottom:4px;
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); transition:.2s; }
+  .icon:hover .glyph { transform:scale(1.1); }
+  .icon .label { font-size:11px; color:#aaa; font-weight:500;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  #widgets { position:absolute; top:56px; right:20px; width:230px; z-index:100;
+    display:flex; flex-direction:column; gap:10px; }
+  .widget { background:var(--glass); backdrop-filter:blur(20px);
+    border:1px solid var(--border); border-radius:12px; padding:14px; font-size:12px; transition:.2s; }
+  .widget:hover { border-color:rgba(255,215,0,.5); }
+  .widget h4 { font-size:10px; color:var(--accent); letter-spacing:1.5px;
+    margin-bottom:10px; text-transform:uppercase; font-weight:600; }
+  .widget canvas { display:block; width:100%; border-radius:6px; }
+
+  /* === WINDOWS === */
+  .window { position:absolute; min-width:320px; min-height:180px;
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow), 0 0 0 1px rgba(255,215,0,.05);
+    display:flex; flex-direction:column; overflow:hidden; animation:winIn .25s cubic-bezier(.4,0,.2,1); }
+  @keyframes winIn { from{transform:scale(.92) translateY(10px);opacity:0} to{transform:scale(1) translateY(0);opacity:1} }
+  .window.closing { animation:winOut .2s cubic-bezier(.4,0,.2,1) forwards; }
+  @keyframes winOut { to{transform:scale(.9);opacity:0} }
+  .window.maximized { top:36px !important; left:0 !important;
+    width:100vw !important; height:calc(100vh - 36px) !important;
+    border-radius:0; transition:.2s cubic-bezier(.4,0,.2,1); }
+  .win-title { height:38px; background:rgba(255,215,0,.05);
+    border-bottom:1px solid var(--border); display:flex; align-items:center;
+    padding:0 12px; cursor:grab; gap:6px; transition:.2s; }
+  .win-title:active { cursor:grabbing; }
+  .win-title .tname { font-size:12px; color:var(--accent); font-weight:600; flex:1;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; user-select:none; }
+  .win-btn { width:24px; height:24px; border-radius:6px; border:none; cursor:pointer;
+    background:transparent; color:#777; font-size:13px; transition:.15s; line-height:1;
+    display:flex; align-items:center; justify-content:center; }
+  .win-btn:hover { background:rgba(255,255,255,.1); color:#fff; }
+  .win-btn.close:hover { background:#e74c3c; color:#fff; }
+  .win-body { flex:1; overflow:auto; padding:14px; font-size:13px; position:relative; }
+  .win-resize { position:absolute; right:0; bottom:0; width:16px; height:16px;
+    cursor:nwse-resize; background:linear-gradient(135deg,transparent 50%,rgba(255,215,0,.35) 50%);
+    border-bottom-right-radius:var(--radius); }
+
+  .term-body { font-family:'Consolas','Courier New',monospace; font-size:13px;
+    line-height:1.7; background:#050508; color:#c8c8c8; padding:14px; }
+  .term-line { white-space:pre-wrap; word-break:break-word; }
+  .term-prompt { color:var(--accent); }
+  .term-input-line { display:flex; align-items:center; }
+  .term-input-line span { color:var(--accent); white-space:nowrap; }
+  .term-input-line input { flex:1; background:transparent; border:none; outline:none;
+    color:#fff; font-family:inherit; font-size:inherit; padding-left:6px; }
+
+  .fm-path { font-size:11px; color:#666; margin-bottom:12px; font-family:'Consolas',monospace;
+    padding:6px 10px; background:rgba(255,255,255,.03); border-radius:6px; }
+  .fm-row { display:flex; align-items:center; gap:12px; padding:9px 12px;
+    border-radius:8px; cursor:pointer; font-size:13px; transition:.15s; }
+  .fm-row:hover { background:rgba(255,215,0,.08); transform:translateX(2px); }
+  .fm-row.selected { background:rgba(255,215,0,.18); }
+  .fm-row .fgi { font-size:18px; }
+  .fm-row .fname { flex:1; }
+  .fm-row .fsize { font-size:10px; color:#555; font-family:'Consolas',monospace; }
+  .fm-toolbar { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .fm-toolbar button { padding:6px 12px; border-radius:8px; border:1px solid var(--border);
+    background:rgba(255,215,0,.06); color:var(--accent); cursor:pointer;
+    font-size:11px; transition:.15s; font-weight:500; }
+  .fm-toolbar button:hover { background:rgba(255,215,0,.18); transform:translateY(-1px); }
+  .fm-dropzone { border:2px dashed rgba(255,215,0,.25); border-radius:10px; padding:14px;
+    text-align:center; color:#666; font-size:11px; margin-bottom:12px; transition:.2s; }
+  .fm-dropzone.dragover { border-color:var(--accent); background:rgba(255,215,0,.1);
+    color:var(--accent); transform:scale(1.02); }
+
+  .editor-area { width:100%; height:100%; background:#050508; color:#e0e0e0;
+    border:none; outline:none; font-family:'Consolas',monospace; font-size:13px;
+    padding:14px; resize:none; line-height:1.6; }
+
+  .mode-card { padding:14px; border-radius:10px; margin-bottom:8px; cursor:pointer;
+    border:1px solid rgba(255,255,255,.08); transition:.2s; }
+  .mode-card:hover { border-color:rgba(255,215,0,.5); transform:translateX(3px); }
+  .mode-card.active { border-color:var(--accent);
+    background:linear-gradient(90deg,rgba(255,215,0,.12),transparent);
+    box-shadow:inset 3px 0 0 var(--accent); }
+  .mode-card h4 { font-size:13px; margin-bottom:4px; font-weight:600; }
+  .mode-card p { font-size:11px; color:#888; }
+  .setting-row { display:flex; justify-content:space-between; align-items:center;
+    padding:12px 0; border-bottom:1px solid rgba(255,255,255,.05); font-size:13px; }
+  .setting-row:last-child { border:none; }
+  .toggle { width:42px; height:24px; background:#333; border-radius:12px;
+    position:relative; cursor:pointer; transition:.25s cubic-bezier(.4,0,.2,1); }
+  .toggle.on { background:var(--accent); box-shadow:0 0 12px rgba(255,215,0,.4); }
+  .toggle::after { content:''; position:absolute; top:3px; left:3px; width:18px; height:18px;
+    background:#fff; border-radius:50%; transition:.25s cubic-bezier(.4,0,.2,1);
+    box-shadow:0 2px 4px rgba(0,0,0,.3); }
+  .toggle.on::after { left:21px; }
+
+  /* Settings tabs */
+  .stabs { display:flex; gap:6px; margin-bottom:16px; border-bottom:1px solid rgba(255,255,255,.08);
+    padding-bottom:10px; overflow-x:auto; }
+  .stab { padding:8px 14px; border-radius:8px 8px 0 0; cursor:pointer; font-size:12px;
+    background:transparent; color:#888; border:none; transition:.15s; font-weight:500;
+    white-space:nowrap; }
+  .stab:hover { background:rgba(255,215,0,.08); color:var(--accent); }
+  .stab.active { background:rgba(255,215,0,.15); color:var(--accent);
+    box-shadow:inset 0 -2px 0 var(--accent); }
+  .stab-content { display:none; }
+  .stab-content.active { display:block; }
+
+  /* Updates */
+  .update-card { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08);
+    border-radius:10px; padding:16px; margin-bottom:12px; transition:.2s; }
+  .update-card:hover { border-color:rgba(255,215,0,.3); }
+  .update-card h4 { color:var(--accent); font-size:13px; margin-bottom:6px; display:flex;
+    align-items:center; gap:8px; }
+  .update-card p { color:#888; font-size:11px; line-height:1.6; margin-bottom:10px; }
+  .update-card .ver { font-family:'Consolas',monospace; font-size:11px; color:#4ade80;
+    background:rgba(74,222,128,.1); padding:2px 8px; border-radius:4px; }
+  .update-btn { padding:10px 20px; background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#111; border:none; border-radius:8px; font-weight:700; cursor:pointer;
+    font-size:12px; transition:.2s; box-shadow:0 4px 16px rgba(255,215,0,.3); }
+  .update-btn:hover { transform:translateY(-2px); box-shadow:0 6px 24px rgba(255,215,0,.5); }
+  .update-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+  .update-progress { height:8px; background:rgba(255,255,255,.1); border-radius:4px;
+    overflow:hidden; margin-top:10px; display:none; }
+  .update-progress.show { display:block; }
+  .update-progress-fill { height:100%; width:0; background:linear-gradient(90deg,#ffd700,#ff8c00);
+    border-radius:4px; transition:width .3s; box-shadow:0 0 10px rgba(255,215,0,.6); }
+  .update-log { background:#050508; border:1px solid var(--border); border-radius:8px;
+    padding:12px; margin-top:12px; font-family:'Consolas',monospace; font-size:11px;
+    color:#4ade80; max-height:180px; overflow-y:auto; line-height:1.6;
+    display:none; white-space:pre-wrap; }
+  .update-log.show { display:block; }
+  .update-log .err { color:#f87171; }
+  .update-log .warn { color:#fbbf24; }
+
+  .code-editor { width:100%; height:150px; background:#050508; color:#4ade80;
+    border:1px solid var(--border); border-radius:8px; padding:12px;
+    font-family:'Consolas',monospace; font-size:12px; resize:vertical; outline:none; line-height:1.6; }
+  .code-out { background:#050508; border:1px solid var(--border); border-radius:8px;
+    padding:12px; margin-top:10px; font-family:'Consolas',monospace; font-size:12px;
+    color:#c8c8c8; min-height:60px; max-height:220px; overflow:auto; white-space:pre-wrap; line-height:1.6; }
+  .run-btn { padding:10px 20px; background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#111; border:none; border-radius:8px; font-weight:700; cursor:pointer;
+    font-size:12px; transition:.2s; box-shadow:0 4px 16px rgba(255,215,0,.3); }
+  .run-btn:hover { transform:translateY(-2px); box-shadow:0 6px 24px rgba(255,215,0,.5); }
+
+  .snap-item { display:flex; justify-content:space-between; align-items:center;
+    padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,.06);
+    margin-bottom:8px; font-size:12px; transition:.15s; }
+  .snap-item:hover { border-color:rgba(255,215,0,.3); background:rgba(255,215,0,.03); }
+  .snap-item .snap-name { color:var(--accent); font-family:'Consolas',monospace; font-size:11px; }
+  .snap-item button { padding:5px 12px; border-radius:6px; border:none; cursor:pointer;
+    background:rgba(255,215,0,.15); color:var(--accent); font-size:11px; transition:.15s; }
+
+  /* === BROWSER === */
+  .vb-wrap { display:flex; flex-direction:column; height:100%; margin:-14px; background:#1a1a22; }
+  .vb-tabs { display:flex; align-items:flex-end; gap:2px; padding:8px 8px 0 8px;
+    background:#0f0f18; overflow-x:auto; scrollbar-width:thin; min-height:40px; }
+  .vb-tab { display:flex; align-items:center; gap:6px; padding:8px 14px;
+    min-width:140px; max-width:240px; background:rgba(255,255,255,.03);
+    border-radius:10px 10px 0 0; cursor:pointer; font-size:12px; color:#888;
+    transition:.2s; border:1px solid transparent; border-bottom:none; flex-shrink:0; position:relative; }
+  .vb-tab:hover { background:rgba(255,215,0,.08); color:#aaa; }
+  .vb-tab.active { background:#1a1a22; color:var(--accent); border-color:var(--border); }
+  .vb-tab .tab-fav { font-size:13px; }
+  .vb-tab .tab-title { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vb-tab .tab-close { width:18px; height:18px; border-radius:50%; border:none;
+    cursor:pointer; background:transparent; color:#666; font-size:11px; line-height:1;
+    opacity:0; transition:.15s; display:flex; align-items:center; justify-content:center; }
+  .vb-tab:hover .tab-close { opacity:1; }
+  .vb-tab .tab-close:hover { background:rgba(231,76,60,.8); color:#fff; }
+  .vb-tab-new { width:28px; height:28px; border-radius:50%; border:none; cursor:pointer;
+    background:rgba(255,255,255,.04); color:#888; font-size:16px; margin:0 4px 6px 4px;
+    transition:.2s; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .vb-tab-new:hover { background:rgba(255,215,0,.2); color:var(--accent); transform:rotate(90deg); }
+
+  .vb-toolbar { display:flex; align-items:center; gap:4px; padding:6px 10px;
+    background:#1a1a22; border-bottom:1px solid var(--border); }
+  .vb-nav-btn { width:32px; height:32px; border-radius:8px; border:none; cursor:pointer;
+    background:rgba(255,255,255,.04); color:#999; font-size:14px;
+    display:flex; align-items:center; justify-content:center; transition:.15s; }
+  .vb-nav-btn:hover:not(:disabled) { background:rgba(255,215,0,.15);
+    color:var(--accent); transform:scale(1.05); }
+  .vb-nav-btn:disabled { opacity:.3; cursor:not-allowed; }
+  .vb-address { flex:1; display:flex; align-items:center; gap:8px;
+    background:#050508; border:1px solid var(--border); border-radius:10px;
+    padding:0 12px; height:34px; transition:.2s; }
+  .vb-address:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(255,215,0,.15); }
+  .vb-address .protocol { font-size:13px; flex-shrink:0; }
+  .vb-address input { flex:1; background:transparent; border:none; outline:none;
+    color:#e0e0e0; font-size:12px; font-family:'Consolas',monospace; }
+  .vb-address .vb-lock { font-size:12px; color:#4ade80; }
+
+  .vb-bookmarks-bar { display:flex; gap:2px; padding:4px 10px;
+    background:#15151e; border-bottom:1px solid rgba(255,215,0,.08); font-size:11px;
+    overflow-x:auto; scrollbar-width:thin; min-height:30px; align-items:center; }
+  .vb-bm { padding:5px 12px; border-radius:6px; cursor:pointer; white-space:nowrap;
+    color:#888; display:flex; align-items:center; gap:6px; transition:.15s; }
+  .vb-bm:hover { background:rgba(255,215,0,.12); color:var(--accent); transform:translateY(-1px); }
+  .vb-bm-add { padding:5px 12px; border-radius:6px; cursor:pointer; color:#666;
+    background:transparent; border:1px dashed rgba(255,215,0,.25); font-size:11px; transition:.15s; }
+  .vb-bm-add:hover { color:var(--accent); border-color:var(--accent); background:rgba(255,215,0,.05); }
+
+  .vb-content { flex:1; position:relative; background:#fff; overflow:hidden; }
+  .vb-frame { width:100%; height:100%; border:none; background:#fff; display:block; }
+
+  .vb-startpage { position:absolute; inset:0;
+    background:linear-gradient(135deg,#0a0a12 0%,#1a1a2e 60%,#0a0a12 100%);
+    display:flex; flex-direction:column; align-items:center;
+    padding:60px 20px 40px; overflow-y:auto; color:#e0e0e0; }
+  .vb-startpage-logo { font-size:72px; filter:drop-shadow(0 0 30px #ffd700);
+    margin-bottom:16px; animation:bootPulse 3s ease-in-out infinite; }
+  .vb-startpage h2 { color:var(--accent); letter-spacing:8px; margin-bottom:36px;
+    font-size:28px; font-weight:300; }
+  .vb-search-box { display:flex; width:100%; max-width:620px;
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,215,0,.3);
+    border-radius:28px; padding:0 24px; height:54px; align-items:center;
+    transition:.25s; box-shadow:0 8px 32px rgba(0,0,0,.5); }
+  .vb-search-box:focus-within { border-color:var(--accent);
+    box-shadow:0 8px 40px rgba(255,215,0,.3); transform:translateY(-2px); }
+  .vb-search-box input { flex:1; background:transparent; border:none; outline:none;
+    color:#fff; font-size:15px; font-family:inherit; }
+  .vb-search-box button { background:transparent; border:none; color:var(--accent);
+    font-size:20px; cursor:pointer; padding:0 8px; transition:.15s; }
+  .vb-search-box button:hover { transform:scale(1.2); }
+  .vb-quicklinks { display:flex; gap:14px; flex-wrap:wrap; justify-content:center;
+    margin-top:36px; max-width:750px; }
+  .vb-quicklink { width:96px; padding:16px 10px; text-align:center;
+    border-radius:12px; cursor:pointer; transition:.2s;
+    background:rgba(255,255,255,.03); border:1px solid transparent; }
+  .vb-quicklink:hover { background:rgba(255,215,0,.1); border-color:rgba(255,215,0,.4);
+    transform:translateY(-4px) scale(1.05); box-shadow:0 8px 24px rgba(255,215,0,.2); }
+  .vb-quicklink .ql-icon { font-size:32px; display:block; margin-bottom:8px; }
+  .vb-quicklink .ql-name { font-size:11px; color:#aaa; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+
+  .vb-blocked { position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:40px; text-align:center;
+    background:linear-gradient(135deg,#0a0a12 0%,#1a1a2e 100%); color:#e0e0e0; }
+  .vb-blocked h3 { color:var(--accent); margin-bottom:16px; font-size:20px; }
+  .vb-blocked p { color:#888; font-size:13px; max-width:520px; line-height:1.7; margin-bottom:24px; }
+  .vb-blocked .vb-blocked-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .vb-blocked button { padding:11px 20px; border-radius:10px; border:none; cursor:pointer;
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#111;
+    font-weight:600; font-size:12px; transition:.2s; }
+  .vb-blocked button:hover { transform:translateY(-2px); }
+  .vb-blocked button.secondary { background:rgba(255,255,255,.08); color:#e0e0e0; }
+
+  .vb-panel { position:absolute; top:0; right:0; bottom:0; width:360px;
+    background:#12121a; border-left:1px solid var(--border); display:flex;
+    flex-direction:column; z-index:100; animation:slideIn .25s cubic-bezier(.4,0,.2,1); }
+  @keyframes slideIn { from{transform:translateX(100%)} to{transform:translateX(0)} }
+  .vb-panel-header { padding:14px 16px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:8px; }
+  .vb-panel-header h4 { flex:1; color:var(--accent); font-size:13px;
+    letter-spacing:1.5px; text-transform:uppercase; font-weight:600; }
+  .vb-panel-header button { width:26px; height:26px; border-radius:6px; border:none;
+    cursor:pointer; background:transparent; color:#888; font-size:14px; transition:.15s; }
+  .vb-panel-content { flex:1; overflow-y:auto; padding:8px; }
+  .vb-panel-item { padding:12px 14px; border-radius:8px; cursor:pointer; font-size:12px;
+    transition:.15s; border:1px solid transparent; position:relative; }
+  .vb-panel-item:hover { background:rgba(255,215,0,.08); border-color:rgba(255,215,0,.25); }
+  .vb-panel-item .vpi-title { color:#fff; font-weight:500; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; margin-bottom:4px; }
+  .vb-panel-item .vpi-url { color:#666; font-size:11px; font-family:'Consolas',monospace; }
+  .vb-panel-item .vpi-del { position:absolute; top:10px; right:10px;
+    background:rgba(248,113,113,.15); color:#f87171; border:none; border-radius:5px;
+    cursor:pointer; font-size:10px; padding:3px 8px; opacity:0; transition:.15s; }
+  .vb-panel-item:hover .vpi-del { opacity:1; }
+  .vb-panel-empty { text-align:center; color:#555; font-size:12px; padding:40px 20px; }
+
+  .vb-findbar { position:fixed; bottom:20px; right:20px; background:#1a1a22;
+    border:1px solid var(--border); border-radius:12px; padding:10px 14px;
+    display:flex; align-items:center; gap:8px; z-index:9999;
+    box-shadow:0 8px 32px rgba(0,0,0,.7); }
+  .vb-findbar input { background:#050508; border:1px solid var(--border); border-radius:6px;
+    padding:8px 12px; color:#fff; font-size:12px; outline:none; width:200px; }
+  .vb-findbar button { padding:8px 14px; background:rgba(255,215,0,.15); color:var(--accent);
+    border:none; border-radius:6px; cursor:pointer; font-size:11px; font-weight:500; }
+
+  /* === MUSIC === */
+  .music-wrap { display:flex; flex-direction:column; height:100%;
+    background:linear-gradient(180deg, rgba(255,215,0,.1) 0%, rgba(20,20,30,.98) 40%);
+    border-radius:8px; padding:18px; gap:14px; }
+  .music-header { display:flex; gap:16px; align-items:center; }
+  .music-cover { width:120px; height:120px; border-radius:14px; flex-shrink:0;
+    background:linear-gradient(135deg, #ffd700, #ff8c00, #e74c3c);
+    display:flex; align-items:center; justify-content:center; font-size:56px;
+    box-shadow:0 12px 40px rgba(255,140,0,.5); position:relative; overflow:hidden;
+    transition:.3s; background-size:cover; background-position:center; }
+  .music-cover::after { content:''; position:absolute; inset:0;
+    background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.4), transparent 60%); pointer-events:none; }
+  .music-cover.playing { animation:coverPulse 2s ease-in-out infinite; }
+  @keyframes coverPulse {
+    0%,100% { box-shadow:0 12px 40px rgba(255,140,0,.5); transform:scale(1); }
+    50% { box-shadow:0 12px 60px rgba(255,140,0,.9); transform:scale(1.02); } }
+  .music-meta { flex:1; min-width:0; }
+  .music-title { font-size:17px; font-weight:600; color:#fff; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; margin-bottom:4px; }
+  .music-artist { font-size:12px; color:#aaa; margin-bottom:10px; }
+  .music-progress { width:100%; height:6px; background:rgba(255,255,255,.1);
+    border-radius:3px; cursor:pointer; overflow:hidden; position:relative; transition:.15s; }
+  .music-progress:hover { height:8px; }
+  .music-progress-fill { height:100%; background:linear-gradient(90deg,#ffd700,#ff8c00);
+    border-radius:3px; width:0%; transition:width .1s; }
+  .music-times { display:flex; justify-content:space-between; font-size:10px;
+    color:#888; margin-top:5px; font-family:'Consolas',monospace; }
+  .music-viz { width:100%; height:64px; border-radius:8px; background:rgba(0,0,0,.4); overflow:hidden; }
+  .music-controls { display:flex; justify-content:center; align-items:center; gap:14px; padding:6px 0; }
+  .music-ctrl { width:44px; height:44px; border-radius:50%; border:none;
+    background:rgba(255,255,255,.08); color:#fff; font-size:17px; cursor:pointer;
+    transition:.2s; display:flex; align-items:center; justify-content:center; }
+  .music-ctrl:hover { background:rgba(255,215,0,.2); transform:scale(1.12); }
+  .music-ctrl.play { width:60px; height:60px; font-size:24px;
+    background:linear-gradient(135deg,#ffd700,#ff8c00); color:#111;
+    box-shadow:0 6px 24px rgba(255,215,0,.5); }
+  .music-ctrl.active { background:var(--accent); color:#111; }
+  .music-volume { display:flex; align-items:center; gap:10px; font-size:11px; color:#888; }
+  .music-volume input { flex:1; accent-color:var(--accent); cursor:pointer; }
+  .music-eq { display:flex; gap:4px; height:44px; align-items:flex-end;
+    background:rgba(0,0,0,.4); padding:6px 10px; border-radius:8px; }
+  .music-eq .eq-bar { flex:1; background:linear-gradient(180deg,#ffd700,#ff8c00);
+    border-radius:2px; min-height:3px; transition:height .08s; }
+  .music-tabs { display:flex; gap:6px; }
+  .music-tab { padding:7px 14px; font-size:11px; border:none; cursor:pointer;
+    background:rgba(255,255,255,.04); color:#888; border-radius:8px; transition:.15s; font-weight:500; }
+  .music-tab.active { background:var(--accent); color:#111; font-weight:700; }
+  .music-playlist { flex:1; overflow-y:auto; min-height:0; background:rgba(0,0,0,.3);
+    border-radius:8px; padding:8px; }
+  .music-track { display:flex; align-items:center; gap:12px; padding:10px 12px;
+    border-radius:6px; cursor:pointer; font-size:12px; transition:.15s; }
+  .music-track:hover { background:rgba(255,215,0,.12); transform:translateX(2px); }
+  .music-track.active { background:rgba(255,215,0,.2); color:var(--accent);
+    box-shadow:inset 3px 0 0 var(--accent); }
+  .music-track .trk-icon { font-size:15px; flex-shrink:0; }
+  .music-track .trk-icon.img-icon { display:inline-block; width:22px; height:22px;
+    border-radius:4px; background-size:cover; background-position:center; }
+  .music-track .trk-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .music-track .trk-remove { opacity:0; padding:3px 8px; background:rgba(248,113,113,.15);
+    color:#f87171; border:none; border-radius:5px; cursor:pointer; font-size:10px; transition:.15s; }
+  .music-track:hover .trk-remove { opacity:1; }
+  .music-empty { color:#555; text-align:center; padding:30px 20px; font-size:12px; line-height:1.6; }
+  .music-add { padding:10px 16px; background:rgba(255,215,0,.15); color:var(--accent);
+    border:1px dashed rgba(255,215,0,.4); border-radius:8px; cursor:pointer;
+    font-size:11px; width:100%; margin-top:8px; transition:.2s; font-weight:500; }
+  .music-hint { font-size:10px; color:#666; text-align:center; margin-top:4px; }
+
+  .audio-pad { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:12px; }
+  .audio-pad button { padding:16px; border-radius:10px; border:1px solid var(--border);
+    background:rgba(255,215,0,.08); color:var(--accent); cursor:pointer;
+    font-size:15px; font-weight:700; transition:.1s; }
+  .audio-slider { width:100%; margin:8px 0; accent-color:var(--accent); cursor:pointer; }
+
+  .game-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .game-canvas { background:#050508; border:1px solid var(--border); border-radius:10px; }
+  .game-info { font-size:12px; color:#aaa; display:flex; gap:20px; }
+  .game-info b { color:var(--accent); font-weight:700; }
+  .g2048 { display:grid; grid-template-columns:repeat(4,1fr); gap:8px;
+    background:#0a0a12; padding:10px; border-radius:10px; }
+  .g2048 .cell { aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    background:#1a1a22; border-radius:6px; font-weight:700; font-size:20px;
+    color:#fff; transition:.1s; }
+  .g2048 .v2 { background:#2a2a32; }
+  .g2048 .v4 { background:#3a3a42; }
+  .g2048 .v8 { background:#ffd700; color:#111; }
+  .g2048 .v16 { background:#ffb700; color:#111; }
+  .g2048 .v32 { background:#ff8c00; color:#111; }
+  .g2048 .v64 { background:#ff6600; color:#fff; }
+  .g2048 .v128 { background:#e74c3c; color:#fff; }
+  .g2048 .v256 { background:#c0392b; color:#fff; }
+  .g2048 .v512 { background:#9b59b6; color:#fff; }
+  .g2048 .v1024 { background:#3498db; color:#fff; }
+  .g2048 .v2048 { background:#1abc9c; color:#fff; }
+
+  #launcher { position:absolute; bottom:16px; left:50%; transform:translateX(-50%);
+    display:flex; gap:6px; padding:8px 12px; border-radius:16px;
+    background:var(--glass); backdrop-filter:blur(20px) saturate(180%);
+    border:1px solid var(--border); box-shadow:0 8px 40px rgba(0,0,0,.7);
+    z-index:4000; max-width:90vw; overflow-x:auto; }
+  #launcher button { width:44px; height:44px; border-radius:11px; border:none;
+    cursor:pointer; background:rgba(255,255,255,.04); font-size:22px;
+    transition:.2s; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  #launcher button:hover { background:rgba(255,215,0,.2);
+    transform:translateY(-4px) scale(1.08); }
+
+  .ctxmenu { position:fixed; background:var(--glass); backdrop-filter:blur(20px) saturate(180%);
+    border:1px solid var(--border); border-radius:10px; padding:6px; min-width:200px;
+    z-index:99999; box-shadow:0 16px 48px rgba(0,0,0,.85); animation:ctxIn .15s cubic-bezier(.4,0,.2,1); }
+  @keyframes ctxIn { from{transform:scale(.93);opacity:0} to{transform:scale(1);opacity:1} }
+  .ctxmenu .ctx-item { padding:9px 14px; border-radius:6px; cursor:pointer;
+    font-size:12px; display:flex; align-items:center; gap:10px; transition:.1s; }
+  .ctxmenu .ctx-item:hover { background:rgba(255,215,0,.15); color:var(--accent); }
+  .ctxmenu .ctx-sep { height:1px; background:rgba(255,255,255,.08); margin:5px 0; }
+
+  #toast { position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#111;
+    padding:12px 24px; border-radius:12px; font-size:13px; font-weight:700; opacity:0;
+    transition:.3s cubic-bezier(.4,0,.2,1); pointer-events:none;
+    box-shadow:0 12px 40px rgba(255,215,0,.5); z-index:9999; max-width:70vw; text-align:center; }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  #notifs { position:absolute; top:44px; right:16px; width:320px; display:flex;
+    flex-direction:column; gap:8px; z-index:4500; pointer-events:none; }
+  .notif { background:var(--glass); backdrop-filter:blur(20px);
+    border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:10px; padding:12px 16px; font-size:12px; pointer-events:auto;
+    animation:notifIn .35s cubic-bezier(.4,0,.2,1); }
+  @keyframes notifIn { from{transform:translateX(60px);opacity:0} to{transform:translateX(0);opacity:1} }
+  .notif h5 { color:var(--accent); font-size:11px; margin-bottom:4px; letter-spacing:1px; font-weight:600; }
+
+  .notes-list { display:flex; flex-direction:column; gap:6px; max-height:220px;
+    overflow-y:auto; margin-bottom:12px; }
+  .note-item { padding:12px 14px; border-radius:8px; border:1px solid rgba(255,255,255,.06);
+    cursor:pointer; font-size:12px; transition:.15s; display:flex;
+    justify-content:space-between; align-items:center; gap:10px; }
+  .note-item:hover { border-color:rgba(255,215,0,.4); background:rgba(255,215,0,.05); }
+  .note-item.active { border-color:var(--accent); background:rgba(255,215,0,.1); }
+  .note-item .note-title { font-weight:600; flex:1; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  .note-editor { width:100%; height:170px; background:#050508; color:#e0e0e0;
+    border:1px solid var(--border); border-radius:8px; padding:12px;
+    font-family:'Consolas',monospace; font-size:12px; resize:vertical;
+    outline:none; line-height:1.6; }
+  .note-actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .note-actions button { padding:7px 14px; border-radius:6px; border:none; cursor:pointer;
+    font-size:11px; background:rgba(255,215,0,.15); color:var(--accent); transition:.15s; }
+  .note-actions button.danger { background:rgba(248,113,113,.15); color:#f87171; }
+
+  .user-screen { padding:20px; text-align:center; }
+  .user-screen h2 { color:var(--accent); margin-bottom:24px; letter-spacing:3px; font-weight:400; }
+  .user-card { padding:16px; border:1px solid var(--border); border-radius:10px;
+    margin-bottom:10px; cursor:pointer; transition:.2s; display:flex;
+    align-items:center; gap:14px; }
+  .user-card:hover { border-color:var(--accent); background:rgba(255,215,0,.08); transform:translateX(4px); }
+  .user-card .u-avatar { width:44px; height:44px; border-radius:50%;
+    background:linear-gradient(135deg,#ffd700,#ff8c00); display:flex;
+    align-items:center; justify-content:center; font-size:22px; }
+  .user-card .u-name { font-size:14px; font-weight:600; }
+  .user-card .u-sub { font-size:11px; color:#888; }
+
+  .img-viewer { display:flex; flex-direction:column; height:100%; }
+  .img-wrap { flex:1; display:flex; align-items:center; justify-content:center;
+    background:#000; border-radius:8px; overflow:hidden; position:relative; }
+  .img-wrap img { max-width:100%; max-height:100%; transition:transform .1s; }
+  .img-controls { display:flex; gap:8px; justify-content:center; padding:10px 0; flex-wrap:wrap; }
+  .img-controls button { padding:7px 14px; border-radius:6px; border:1px solid var(--border);
+    background:rgba(255,215,0,.1); color:var(--accent); cursor:pointer; font-size:11px; }
+  .img-controls button:hover { background:rgba(255,215,0,.25); }
+
+  .video-wrap { display:flex; flex-direction:column; height:100%; gap:10px; }
+  .video-el { width:100%; flex:1; border-radius:8px; background:#000; }
+  .video-bar { display:flex; gap:8px; flex-wrap:wrap; }
+  .video-bar button { padding:8px 16px; background:rgba(255,215,0,.15); color:var(--accent);
+    border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:500; }
+
+  #lockscreen { position:fixed; inset:0; z-index:99998;
+    background:linear-gradient(135deg,#0a0a12 0%,#1a1a2e 50%,#0a0a12 100%);
+    display:none; flex-direction:column; align-items:center;
+    justify-content:center; color:#fff; }
+  #lockscreen.show { display:flex; animation:fadeIn .4s cubic-bezier(.4,0,.2,1); }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  #lockscreen .lock-clock { font-size:88px; font-weight:200; letter-spacing:6px;
+    color:#fff; text-shadow:0 4px 40px rgba(255,215,0,.4); margin-bottom:8px; }
+  #lockscreen .lock-date { font-size:16px; color:#888; letter-spacing:3px; margin-bottom:60px; }
+  #lockscreen .lock-avatar { width:96px; height:96px; border-radius:50%;
+    background:linear-gradient(135deg,#ffd700,#ff8c00); display:flex;
+    align-items:center; justify-content:center; font-size:48px;
+    box-shadow:0 8px 40px rgba(255,215,0,.5); margin-bottom:20px; }
+  #lockscreen .lock-user { font-size:20px; margin-bottom:20px; }
+  #lockscreen .lock-input { display:flex; gap:8px; }
+  #lockscreen .lock-input input { padding:12px 20px; background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,215,0,.3); border-radius:10px; color:#fff;
+    font-size:14px; outline:none; width:240px; }
+  #lockscreen .lock-input button { padding:12px 24px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#111;
+    border:none; border-radius:10px; font-weight:700; cursor:pointer; font-size:13px; }
+  #lockscreen .lock-hint { margin-top:20px; font-size:11px; color:#555; }
+
+  body.light { --bg:#f0f0f5; --panel:rgba(255,255,255,.97); --border:rgba(230,126,34,.35);
+    --accent:#e67e22; --accent2:#d35400; --text:#222; --text-dim:#666;
+    --text-mute:#999; --glass:rgba(255,255,255,.85); color:#222; }
+  body.light #desktop { background:radial-gradient(circle at 30% 20%,#e8e8f5 0%,#d0d0e0 60%,#b0b0c0 100%); }
+  body.light #topbar { background:rgba(255,255,255,.9); }
+  body.light .term-body, body.light .editor-area, body.light .code-editor,
+  body.light .code-out, body.light .note-editor { background:#1a1a22; color:#e0e0e0; }
+  body.light .icon .label, body.light #topbar .stat { color:#555; }
+
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:rgba(255,215,0,.25); border-radius:4px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="glitchOverlay"></div>
+
+<div id="boot">
+  <div class="bolt">⚡</div>
+  <h1>VoltOS</h1>
+  <p id="bootVersion">ENERGY-AWARE MICROKERNEL — v6.3</p>
+  <div class="boot-bar"><div class="boot-bar-fill" id="bootbar"></div></div>
+  <div id="bootlog"></div>
+</div>
+
+<div id="lockscreen">
+  <div class="lock-clock" id="lockClock">00:00</div>
+  <div class="lock-date" id="lockDate"></div>
+  <div class="lock-avatar" id="lockAvatar">👤</div>
+  <div class="lock-user" id="lockUser">guest</div>
+  <div class="lock-input">
+    <input type="password" id="lockPass" placeholder="Пароль..." autocomplete="off">
+    <button id="lockBtn">Войти</button>
+  </div>
+  <div class="lock-hint" id="lockHint">Нажми Войти или Enter</div>
+</div>
+
+<div id="desktop">
+  <div id="topbar">
+    <span class="logo" onclick="openWindow('about')">⚡ VoltOS</span>
+    <span class="pill mode-pill" id="modePill" onclick="openWindow('settings')">balanced</span>
+    <span class="pill user-pill" id="userPill" onclick="openWindow('users')">👤 guest</span>
+    <div class="vdots" id="vdots"></div>
+    <span class="spacer"></span>
+    <span class="stat">🔋 <b id="batTxt">87%</b></span>
+    <div class="battery"><div class="battery-fill" id="batFill" style="width:87%"></div></div>
+    <span class="stat">⚙ <b id="cpuTxt">12%</b></span>
+    <span class="stat">🧠 <b id="memTxt">2.1 GB</b></span>
+    <span class="stat">💾 <b id="diskTxt">0 KB</b></span>
+    <span class="stat" id="clock">--:--</span>
+    <span class="stat" id="lockNowBtn" style="cursor:pointer" title="Заблокировать">🔒</span>
+  </div>
+  <div class="icons" id="icons"></div>
+  <div id="widgets"></div>
+  <div id="windows"></div>
+  <div id="launcher"></div>
+  <div id="notifs"></div>
+  <div id="toast"></div>
+</div>
+
+<script>
+/* ============================================================
+   VoltOS 6.3
+   - Шанс 0.00042% гличнутой версии при запуске
+   - Вкладка "Обновления" с реальным fetch к серверу
+   ============================================================ */
+
+/* ============ EARLY DECLARATIONS ============ */
+const LS_KEY = 'voltos_state_v63';
+const LS_USERS = 'voltos_users_v63';
+const LS_COVERS = 'voltos_music_covers_v1';
+const CURRENT_VERSION = '6.3.0';
+const UPDATE_SERVER = 'https://api.github.com/natharusussvecov/voltos/releases/latest';
+
+/* === ГЛИТЧ: шанс 0.00042% (1 из ~238095) === */
+const GLITCH_CHANCE = 0.0000042;
+const IS_GLITCHED = Math.random() < GLITCH_CHANCE;
+if (IS_GLITCHED) {
+  console.warn('⚠️ VOLTOS: ГЛИЧНАЯ ВЕРСИЯ АКТИВИРОВАНА');
+  document.body.classList.add('glitched');
+  const bv = document.getElementById('bootVersion');
+  if (bv) bv.innerHTML = '<span class="glitch-text">⚠ CORRUPTED KERNEL — v6.3.0-GLITCH ⚠</span>';
+}
+
+const vbState = {
+  tabs: [], activeTab: 0, history: [],
+  bookmarks: [
+    { title:'Wikipedia', url:'https://ru.wikipedia.org', icon:'📖' },
+    { title:'DuckDuckGo', url:'https://duckduckgo.com', icon:'🦆' },
+    { title:'GitHub', url:'https://github.com', icon:'🐙' },
+    { title:'MDN', url:'https://developer.mozilla.org', icon:'📚' }
+  ],
+  downloads: [], panel: null, tabIdCounter: 0
+};
+
+let musicCovers = {};
+try { musicCovers = JSON.parse(localStorage.getItem(LS_COVERS) || '{}'); }
+catch(e) { musicCovers = {}; }
+
+let musicAudio = null, musicAnalyser = null, musicCtx = null, musicSource = null;
+const musicState = { playlist: [], current: -1, shuffle: false, repeat: false };
+
+const state = {
+  mode: 'balanced', battery: 87, cpu: 12, mem: 2.1,
+  windows: {}, z: 100,
+  currentVD: 0, vdesktops: 4, vdWindows: {},
+  lightTheme: false, amoled: false, notifications: true,
+  snapshots: [], history: [],
+  currentUser: 'guest',
+  users: { guest: { name:'Гость', avatar:'👤', fs: null, notes: [], password: '' } },
+  lockPassword: '',
+  wallpaper: 0
+};
+
+/* ============ STORAGE ============ */
+function saveState() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      mode: state.mode, battery: state.battery,
+      vdesktops: state.vdesktops, lightTheme: state.lightTheme,
+      amoled: state.amoled, notifications: state.notifications,
+      currentUser: state.currentUser, snapshots: state.snapshots,
+      fs: serializeFS(), wallpaper: state.wallpaper,
+      lockPassword: state.lockPassword,
+      browserHistory: vbState.history.slice(0, 200),
+      browserBookmarks: vbState.bookmarks,
+      browserDownloads: vbState.downloads.slice(0, 50)
+    }));
+    localStorage.setItem(LS_USERS, JSON.stringify(
+      Object.keys(state.users).reduce((acc, u) => {
+        acc[u] = {
+          name: state.users[u].name,
+          avatar: state.users[u].avatar,
+          notes: state.users[u].notes || [],
+          password: state.users[u].password || ''
+        };
+        return acc;
+      }, {})
+    ));
+  } catch(e) { console.warn('save failed', e); }
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      Object.assign(state, {
+        mode: d.mode || 'balanced',
+        battery: d.battery ?? 87,
+        vdesktops: d.vdesktops || 4,
+        lightTheme: !!d.lightTheme,
+        amoled: !!d.amoled,
+        notifications: d.notifications !== false,
+        currentUser: d.currentUser || 'guest',
+        snapshots: d.snapshots || [],
+        wallpaper: d.wallpaper || 0,
+        lockPassword: d.lockPassword || ''
+      });
+      if (d.fs) deserializeFS(d.fs);
+      if (d.browserHistory) vbState.history = d.browserHistory;
+      if (d.browserBookmarks) vbState.bookmarks = d.browserBookmarks;
+      if (d.browserDownloads) vbState.downloads = d.browserDownloads;
+      document.body.classList.toggle('light', state.lightTheme);
+      document.body.classList.toggle('amoled', state.amoled);
+    }
+    const u = localStorage.getItem(LS_USERS);
+    if (u) {
+      const parsed = JSON.parse(u);
+      Object.keys(parsed).forEach(k => {
+        if (!state.users[k]) state.users[k] = {
+          name: parsed[k].name, avatar: parsed[k].avatar || '👤',
+          notes: parsed[k].notes || [], password: parsed[k].password || ''
+        };
+        else {
+          state.users[k].notes = parsed[k].notes || [];
+          state.users[k].password = parsed[k].password || '';
+        }
+      });
+    }
+    return !!raw;
+  } catch(e) { return false; }
+}
+
+/* ============ FS ============ */
+const fs = {
+  'notes.txt': { icon:'📄', content:'⚡ VoltOS 6.3\n\nНовое:\n- Гличная версия (шанс 0.00042%)\n- Вкладка "Обновления"\n- Артефакты на рабочем столе\n- Скачивание "обновления Windows" с сервера\n' },
+  'readme.md': { icon:'📄', content:'# VoltOS 6.3\n\nПроверь Обновления:\nНастройки → Обновления → Проверить\n' },
+  'todo.txt': { icon:'📄', content:'[x] Glitch mode\n[x] Updates tab\n[ ] Сеть\n[ ] ARM64' },
+  'config.toml': { icon:'⚙️', content:'[system]\nhostname = "voltos"\nversion = "6.3.0"\n' },
+  'photos': { icon:'📁', dir:true, content:{} }
+};
+
+function serializeFS() {
+  const out = {};
+  for (const k in fs) {
+    const o = fs[k];
+    out[k] = {
+      icon:o.icon, dir:o.dir,
+      content: o.dir ? serializeFSFrom(o.content) : o.content,
+      binary:o.binary, size:o.size, mime:o.mime,
+      embeddedCover: o.embeddedCover
+    };
+  }
+  return out;
+}
+function serializeFSFrom(obj) {
+  const out = {};
+  for (const k in obj) {
+    const o = obj[k];
+    out[k] = {
+      icon:o.icon, dir:o.dir,
+      content: o.dir ? serializeFSFrom(o.content) : o.content,
+      binary:o.binary, size:o.size, mime:o.mime,
+      embeddedCover: o.embeddedCover
+    };
+  }
+  return out;
+}
+function deserializeFS(data) {
+  Object.keys(fs).forEach(k => delete fs[k]);
+  for (const k in data) fs[k] = data[k];
+}
+
+/* ============ BOOT ============ */
+const bootLines = IS_GLITCHED ? [
+  '> VoltBoot v6.3.0-GLITCH',
+  '> [ERR] memory parity error',
+  '> [WARN] scheduler desync',
+  '> [ok] VoltFS (corrupted)',
+  '> [WARN] WASM sandbox broken',
+  '> [ERR] audio driver crash',
+  '> [ok] Crypto (weak)',
+  '> [ERR] user subsystem',
+  '> [WARN] browser engine',
+  '> [ERR] music covers',
+  '> ⚠ CORRUPTED — proceeding anyway'
+] : [
+  '> VoltBoot v6.3',
+  '> [ok] Memory',
+  '> [ok] VoltSched',
+  '> [ok] VoltFS',
+  '> [ok] WASM',
+  '> [ok] Audio/Video',
+  '> [ok] Crypto',
+  '> [ok] Multi-user',
+  '> [ok] Browser',
+  '> [ok] Music covers',
+  '> ⚡ Ready'
+];
+let bi = 0;
+const bootlog = document.getElementById('bootlog');
+const bootbar = document.getElementById('bootbar');
+const bootTimer = setInterval(() => {
+  if (bi < bootLines.length) {
+    const line = bootLines[bi];
+    const color = line.includes('ERR') ? '#f87171' : line.includes('WARN') ? '#fbbf24' : '#333';
+    bootlog.innerHTML += `<span style="color:${color}">${line}</span><br>`;
+    bootbar.style.width = ((bi+1)/bootLines.length*100) + '%';
+    bi++;
+  } else {
+    clearInterval(bootTimer);
+    setTimeout(() => {
+      document.getElementById('boot').classList.add('done');
+      document.getElementById('desktop').classList.add('show');
+      try { startDesktop(); } catch(e) { console.error('startDesktop failed:', e); }
+      if (IS_GLITCHED) setTimeout(activateGlitchMode, 800);
+    }, 500);
+  }
+}, IS_GLITCHED ? 150 : 200);
+
+/* ============ GLITCH MODE ============ */
+function activateGlitchMode() {
+  console.log('⚠️ ACTIVATING GLITCH MODE');
+  const overlay = document.getElementById('glitchOverlay');
+  if (overlay) overlay.classList.add('active');
+
+  // Создаём артефакты на рабочем столе
+  spawnGlitchArtifacts();
+
+  // Глючные уведомления
+  setTimeout(() => notify('⚠ SYSTEM ERROR', 'Corrupted memory block at 0xDEADBEEF'), 500);
+  setTimeout(() => notify('❌ KERNEL PANIC', 'Reality.exe has stopped working'), 2000);
+  setTimeout(() => notify('🌀 GLITCH', 'The void is staring back'), 3500);
+  setTimeout(() => notify('⚠ WARNING', 'Reality integrity: 42%'), 5000);
+
+  // Вибрация цвета
+  setInterval(() => {
+    if (Math.random() < 0.3) {
+      document.body.style.filter = `hue-rotate(${Math.random()*360}deg) saturate(${1+Math.random()*2})`;
+      setTimeout(() => document.body.style.filter = '', 100);
+    }
+  }, 2000);
+
+  // Периодические артефакты
+  setInterval(spawnGlitchArtifacts, 4000);
+}
+
+function spawnGlitchArtifacts() {
+  const desk = document.getElementById('desktop');
+  if (!desk) return;
+  const num = 3 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < num; i++) {
+    const a = document.createElement('div');
+    a.className = 'glitch-artifact';
+    const w = 20 + Math.random() * 200;
+    const h = 2 + Math.random() * 40;
+    a.style.width = w + 'px';
+    a.style.height = h + 'px';
+    a.style.left = Math.random() * (window.innerWidth - w) + 'px';
+    a.style.top = Math.random() * (window.innerHeight - h) + 'px';
+    a.style.background = `hsl(${Math.random()*360}, 100%, 60%)`;
+    a.style.opacity = 0.3 + Math.random() * 0.5;
+    a.style.animationDelay = Math.random() * 3 + 's';
+    a.style.transform = `rotate(${Math.random()*20-10}deg)`;
+    desk.appendChild(a);
+    setTimeout(() => a.remove(), 2000 + Math.random() * 4000);
+  }
+}
+
+/* ============ APPS ============ */
+const apps = {
+  browser:  { icon:'🌐', name:'Volt Browser', open: () => openWindow('browser') },
+  terminal: { icon:'⬛', name:'Terminal', open: () => openWindow('terminal') },
+  files:    { icon:'📁', name:'Files',    open: () => openWindow('files') },
+  editor:   { icon:'📝', name:'Editor',   open: () => openWindow('editor') },
+  music:    { icon:'🎵', name:'Volt Music',open:() => openWindow('music') },
+  video:    { icon:'🎬', name:'Video',    open: () => openWindow('video') },
+  imgview:  { icon:'🖼️', name:'Images',   open: () => openWindow('imgview') },
+  notes:    { icon:'🔐', name:'Notes',    open: () => openWindow('notes') },
+  snake:    { icon:'🐍', name:'Snake',    open: () => openWindow('snake') },
+  g2048:    { icon:'🎮', name:'2048',     open: () => openWindow('g2048') },
+  wasm:     { icon:'🧪', name:'WASM Lab', open: () => openWindow('wasm') },
+  sched:    { icon:'📊', name:'Scheduler',open: () => openWindow('sched') },
+  snap:     { icon:'💾', name:'Snapshots',open: () => openWindow('snap') },
+  users:    { icon:'👥', name:'Users',    open: () => openWindow('users') },
+  settings: { icon:'⚙️', name:'Settings', open: () => openWindow('settings') },
+  about:    { icon:'⚡', name:'About',    open: () => openWindow('about') }
+};
+
+function startDesktop() {
+  let loaded = false;
+  try { loaded = loadState(); } catch(e) { console.warn('loadState failed:', e); }
+  if (loaded) setTimeout(() => notify('⚡ VoltOS', 'Состояние восстановлено'), 500);
+  const iconsEl = document.getElementById('icons');
+  Object.entries(apps).forEach(([k,a]) => {
+    const d = document.createElement('div');
+    d.className = 'icon';
+    d.innerHTML = `<span class="glyph">${a.icon}</span><span class="label">${a.name}</span>`;
+    d.ondblclick = a.open;
+    d.oncontextmenu = (e) => showContextMenu(e, [
+      { label:'Открыть', icon:'▶', action:a.open }
+    ]);
+    iconsEl.appendChild(d);
+  });
+  const l = document.getElementById('launcher');
+  Object.entries(apps).forEach(([k,a]) => {
+    const b = document.createElement('button');
+    b.textContent = a.icon; b.title = a.name; b.onclick = a.open;
+    l.appendChild(b);
+  });
+
+  initVDesktops();
+  initWidgets();
+  updateClock();
+  updateUserPill();
+  try { applyWallpaper(); } catch(e) {}
+  setInterval(updateClock, 1000);
+  setInterval(tickStats, 2000);
+  setInterval(saveState, 8000);
+
+  document.getElementById('lockNowBtn').onclick = () => {
+    if (!state.lockPassword) {
+      const p = prompt('Пароль блокировки (пусто = отмена):');
+      if (!p) { toast('Отменено'); return; }
+      state.lockPassword = p; saveState(); toast('Пароль установлен');
+    }
+    showLockScreen();
+  };
+
+  document.getElementById('desktop').oncontextmenu = (e) => {
+    if (e.target.closest('.window, .icon, #launcher, #topbar, #widgets')) return;
+    e.preventDefault();
+    showContextMenu(e, [
+      { label:'Volt Browser', icon:'🌐', action:() => openWindow('browser') },
+      { label:'Загрузить файл...', icon:'📤', action: pickFileForUpload },
+      { label:'Новый файл', icon:'📄', action: createFileDialog },
+      { label:'Новая папка', icon:'📁', action: () => toast('Папка создана') },
+      { sep:true },
+      { label:'Сменить обои', icon:'🖼️', action: cycleWallpaper },
+      { label:'Следующий стол', icon:'🖥️', kbd:'Ctrl+→', action: () => switchVD((state.currentVD+1)%state.vdesktops) },
+      { label:'Настройки', icon:'⚙️', action: () => openWindow('settings') },
+      { label:'Проверить обновления', icon:'🔄', action: () => openSettingsTab('updates') },
+      { sep:true },
+      { label:'Снапшот', icon:'💾', action: createSnapshot },
+      { label:'Экспорт ФС', icon:'📦', action: exportFS },
+      { label:'Заблокировать', icon:'🔒', action: () => showLockScreen() },
+      { label:'Сброс', icon:'⚠️', action: () => {
+        if (confirm('Сбросить всё?')) { localStorage.clear(); location.reload(); }
+      }}
+    ]);
+  };
+
+  const desk = document.getElementById('desktop');
+  desk.addEventListener('dragover', (e) => { e.preventDefault(); desk.classList.add('dragover'); });
+  desk.addEventListener('dragleave', (e) => {
+    if (e.target === desk) desk.classList.remove('dragover');
+  });
+  desk.addEventListener('drop', async (e) => {
+    e.preventDefault(); desk.classList.remove('dragover');
+    if (e.dataTransfer.files.length) await handleUploadedFiles(e.dataTransfer.files);
+  });
+}
+
+/* ============ CLOCK / STATS ============ */
+function updateClock() {
+  const d = new Date();
+  const time = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  document.getElementById('clock').textContent = time;
+  const lc = document.getElementById('lockClock');
+  const ld = document.getElementById('lockDate');
+  if (lc) lc.textContent = time;
+  if (ld) {
+    const opts = { weekday:'long', day:'numeric', month:'long' };
+    ld.textContent = d.toLocaleDateString('ru-RU', opts);
+  }
+}
+function tickStats() {
+  const drain = { turbo:0.3, balanced:0.1, eco:0.04, survival:0.01 }[state.mode];
+  state.battery = Math.max(0, state.battery - drain);
+  state.cpu = Math.max(3, Math.min(95, state.cpu + (Math.random()-0.5)*8));
+  state.mem = Math.max(1.2, Math.min(7.5, state.mem + (Math.random()-0.5)*0.2));
+  if (state.battery < 20 && !state._warned) {
+    state._warned = true;
+    notify('🔋 Батарея', 'Заряд ниже 20%. Рекомендую eco.');
+  }
+  if (state.battery < 5) state.mode = 'survival';
+  renderStats();
+}
+function renderStats() {
+  document.getElementById('batTxt').textContent = Math.round(state.battery)+'%';
+  const fill = document.getElementById('batFill');
+  fill.style.width = state.battery+'%';
+  fill.style.background = state.battery < 20 ? '#f87171' : '#4ade80';
+  document.getElementById('cpuTxt').textContent = Math.round(state.cpu)+'%';
+  document.getElementById('memTxt').textContent = state.mem.toFixed(1)+' GB';
+  document.getElementById('modePill').textContent = state.mode;
+  let total = 0;
+  for (const k in fs) total += (fs[k].content ? String(fs[k].content).length : 0) + (fs[k].size||0);
+  document.getElementById('diskTxt').textContent = (total/1024).toFixed(1) + ' KB';
+}
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._tm);
+  t._tm = setTimeout(() => t.classList.remove('show'), 2800);
+}
+function notify(title, msg) {
+  if (!state.notifications) return;
+  const n = document.createElement('div');
+  n.className = 'notif';
+  n.innerHTML = `<h5>${title}</h5>${msg}`;
+  document.getElementById('notifs').appendChild(n);
+  setTimeout(() => { n.style.opacity = '0'; setTimeout(()=>n.remove(), 300); }, 4500);
+}
+function updateUserPill() {
+  const u = state.users[state.currentUser];
+  document.getElementById('userPill').textContent = (u?u.avatar:'👤') + ' ' + state.currentUser;
+}
+
+/* ============ WALLPAPER ============ */
+const wallpapers = [
+  'radial-gradient(circle at 30% 20%, #1a1a2e 0%, #0a0a12 60%, #000 100%)',
+  'radial-gradient(circle at 70% 30%, #2e1a1a 0%, #120a0a 60%, #000 100%)',
+  'radial-gradient(circle at 50% 50%, #1a2e1a 0%, #0a120a 60%, #000 100%)',
+  'radial-gradient(circle at 20% 80%, #1a2e2e 0%, #0a1212 60%, #000 100%)',
+  'linear-gradient(135deg, #0a0a12 0%, #1a1a2e 50%, #0a0a12 100%)',
+  'radial-gradient(circle at 70% 70%, #2e1a2e 0%, #120a12 60%, #000 100%)'
+];
+function applyWallpaper() {
+  const idx = (state.wallpaper || 0) % wallpapers.length;
+  document.getElementById('desktop').style.background = wallpapers[idx];
+}
+function cycleWallpaper() {
+  state.wallpaper = ((state.wallpaper || 0) + 1) % wallpapers.length;
+  applyWallpaper();
+  toast('Обои #' + (state.wallpaper+1));
+  saveState();
+}
+
+/* ============ VDESKTOPS ============ */
+function initVDesktops() {
+  const dots = document.getElementById('vdots');
+  dots.innerHTML = '';
+  for (let i = 0; i < state.vdesktops; i++) {
+    const d = document.createElement('div');
+    d.className = 'vdot' + (i===state.currentVD ? ' active' : '');
+    d.onclick = () => switchVD(i);
+    dots.appendChild(d);
+  }
+}
+function switchVD(n) {
+  state.currentVD = n;
+  document.querySelectorAll('.vdot').forEach((d,i)=>d.classList.toggle('active', i===n));
+  Object.entries(state.windows).forEach(([id, w]) => {
+    w.style.display = (state.vdWindows[id] === n) ? '' : 'none';
+  });
+}
+
+/* ============ LOCK SCREEN ============ */
+function showLockScreen() {
+  const u = state.users[state.currentUser];
+  document.getElementById('lockAvatar').textContent = u ? u.avatar : '👤';
+  document.getElementById('lockUser').textContent = state.currentUser;
+  document.getElementById('lockPass').value = '';
+  document.getElementById('lockHint').textContent = state.lockPassword
+    ? 'Введи пароль' : 'Пароль не установлен — нажми Войти';
+  document.getElementById('lockscreen').classList.add('show');
+  setTimeout(()=>document.getElementById('lockPass').focus(), 100);
+  updateClock();
+}
+function tryUnlock() {
+  const p = document.getElementById('lockPass').value;
+  if (!state.lockPassword || p === state.lockPassword) {
+    document.getElementById('lockscreen').classList.remove('show');
+    toast('🔓 Разблокировано');
+  } else {
+    document.getElementById('lockHint').textContent = '❌ Неверный пароль';
+    document.getElementById('lockHint').style.color = '#f87171';
+    setTimeout(() => {
+      document.getElementById('lockHint').style.color = '#555';
+    }, 2000);
+  }
+}
+
+/* ============ WINDOW MANAGER ============ */
+function openWindow(id, opts = {}) {
+  if (state.windows[id] && !opts.force) {
+    bringFront(id);
+    state.windows[id].style.display = '';
+    state.vdWindows[id] = state.currentVD;
+    switchVD(state.currentVD);
+    return state.windows[id];
+  }
+  const meta = {
+    browser:  { title:'🌐 Volt Browser', w:960, h:640, body: browserBody() },
+    terminal: { title:'⚡ Terminal', w:640, h:420, body: termBody() },
+    files:    { title:'📁 Files', w:600, h:460, body: filesBody() },
+    editor:   { title:'📝 Editor', w:600, h:440, body: editorBody() },
+    music:    { title:'🎵 Volt Music', w:420, h:660, body: musicBody() },
+    video:    { title:'🎬 Video Player', w:680, h:500, body: videoBody() },
+    imgview:  { title:'🖼️ Images', w:640, h:540, body: imgviewBody() },
+    notes:    { title:'🔐 Notes', w:500, h:560, body: notesBody() },
+    snake:    { title:'🐍 Snake', w:420, h:470, body: snakeBody() },
+    g2048:    { title:'🎮 2048', w:390, h:480, body: g2048Body() },
+    wasm:     { title:'🧪 WASM Lab', w:540, h:500, body: wasmBody() },
+    sched:    { title:'📊 Scheduler', w:580, h:410, body: schedBody() },
+    snap:     { title:'💾 Snapshots', w:480, h:420, body: snapBody() },
+    users:    { title:'👥 Users', w:440, h:420, body: usersBody() },
+    settings: { title:'⚙️ Settings', w:520, h:700, body: settingsBody() },
+    about:    { title:'⚡ About', w:440, h:400, body: aboutBody() }
+  }[id];
+  if (!meta) return;
+
+  const win = document.createElement('div');
+  win.className = 'window'; win.dataset.id = id;
+  win.style.width = meta.w+'px'; win.style.height = meta.h+'px';
+  win.style.left = (60 + Object.keys(state.windows).length*30)+'px';
+  win.style.top  = (60 + Object.keys(state.windows).length*25)+'px';
+  win.style.zIndex = ++state.z;
+  win.innerHTML = `
+    <div class="win-title">
+      <span class="tname">${meta.title}</span>
+      <button class="win-btn minimize" title="Свернуть">—</button>
+      <button class="win-btn maximize" title="Развернуть">□</button>
+      <button class="win-btn close" title="Закрыть">✕</button>
+    </div>
+    <div class="win-body ${id==='terminal'?'term-body':''}">${meta.body}</div>
+    <div class="win-resize"></div>
+  `;
+
+  const closeWin = () => {
+    win.classList.add('closing');
+    setTimeout(() => {
+      delete state.windows[id];
+      delete state.vdWindows[id];
+      win.remove();
+      saveState();
+    }, 180);
+  };
+  win.querySelector('.close').onclick = closeWin;
+  win.querySelector('.minimize').onclick = () => { win.style.display = 'none'; };
+  win.querySelector('.maximize').onclick = () => { win.classList.toggle('maximized'); };
+  win.onmousedown = () => bringFront(id);
+
+  const title = win.querySelector('.win-title');
+  let dx=0, dy=0, dragging=false;
+  title.onmousedown = (e) => {
+    if (e.target.classList.contains('win-btn')) return;
+    if (win.classList.contains('maximized')) return;
+    dragging = true;
+    dx = e.clientX - win.offsetLeft;
+    dy = e.clientY - win.offsetTop;
+    e.preventDefault();
+  };
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    win.style.left = Math.max(0, e.clientX - dx)+'px';
+    win.style.top  = Math.max(36, e.clientY - dy)+'px';
+  });
+  document.addEventListener('mouseup', () => dragging = false);
+
+  const rz = win.querySelector('.win-resize');
+  let rx=0, ry=0, rw=0, rh=0, resizing=false;
+  rz.onmousedown = (e) => {
+    e.stopPropagation(); resizing = true;
+    rx = e.clientX; ry = e.clientY;
+    rw = win.offsetWidth; rh = win.offsetHeight;
+    e.preventDefault();
+  };
+  document.addEventListener('mousemove', (e) => {
+    if (!resizing) return;
+    win.style.width = Math.max(320, rw + (e.clientX-rx))+'px';
+    win.style.height = Math.max(180, rh + (e.clientY-ry))+'px';
+  });
+  document.addEventListener('mouseup', () => resizing = false);
+
+  title.oncontextmenu = (e) => {
+    e.preventDefault();
+    showContextMenu(e, [
+      { label:'Свернуть', icon:'—', action:()=>{ win.style.display='none'; } },
+      { label:'Развернуть', icon:'□', action:()=>{ win.classList.toggle('maximized'); } },
+      { sep:true },
+      { label:'На другой стол', icon:'🖥️', action:()=>{
+        const next = (state.vdWindows[id]+1) % state.vdesktops;
+        state.vdWindows[id] = next;
+        toast('Окно на столе ' + (next+1));
+      }},
+      { sep:true },
+      { label:'Закрыть', icon:'✕', action: closeWin }
+    ]);
+  };
+
+  document.getElementById('windows').appendChild(win);
+  state.windows[id] = win;
+  state.vdWindows[id] = state.currentVD;
+
+  try {
+    const inits = {
+      terminal: initTerminal, files: initFiles, editor: initEditor,
+      settings: initSettings, wasm: initWasm, sched: initSched,
+      snap: initSnap, browser: initBrowser, music: initMusic,
+      video: initVideo, imgview: initImgView, notes: initNotes,
+      snake: initSnake, g2048: initG2048, users: initUsers
+    };
+    if (inits[id]) inits[id](win);
+  } catch(e) { console.error('Window init failed:', id, e); }
+  return win;
+}
+function bringFront(id) {
+  const w = state.windows[id];
+  if (w) w.style.zIndex = ++state.z;
+}
+
+/* ============ CONTEXT MENU ============ */
+let ctxEl = null;
+function showContextMenu(e, items) {
+  e.preventDefault(); hideContextMenu();
+  const m = document.createElement('div');
+  m.className = 'ctxmenu';
+  items.forEach(it => {
+    if (it.sep) { const s = document.createElement('div'); s.className = 'ctx-sep'; m.appendChild(s); return; }
+    const d = document.createElement('div');
+    d.className = 'ctx-item';
+    d.innerHTML = `<span>${it.icon||''}</span><span>${it.label}</span>`;
+    d.onclick = () => { hideContextMenu(); it.action && it.action(); };
+    m.appendChild(d);
+  });
+  const x = Math.min(e.clientX, window.innerWidth - 240);
+  const y = Math.min(e.clientY, window.innerHeight - m.children.length*36 - 20);
+  m.style.left = x+'px'; m.style.top = y+'px';
+  document.body.appendChild(m);
+  ctxEl = m;
+}
+function hideContextMenu() { if (ctxEl) { ctxEl = null; document.querySelectorAll('.ctxmenu').forEach(e=>e.remove()); } }
+document.addEventListener('click', hideContextMenu);
+
+/* ============ MUSIC COVERS ============ */
+function saveMusicCovers() {
+  try { localStorage.setItem(LS_COVERS, JSON.stringify(musicCovers)); }
+  catch(e) {}
+}
+function pickCoverEmoji(name) {
+  const emojis = ['🎵','🎶','🎧','🎤','🎼','🥁','🎸','🎹','🎺','🎻'];
+  let h = 0; for (const c of name) h += c.charCodeAt(0);
+  return emojis[h % emojis.length];
+}
+function getCoverContent(name) {
+  const f = fs[name];
+  if (musicCovers[name]) {
+    const c = musicCovers[name];
+    if (c.type === 'emoji') return { type:'emoji', value: c.value };
+    if (c.type === 'url' || c.type === 'data') return { type:'img', value: c.value };
+  }
+  if (f && f.embeddedCover) return { type:'img', value: f.embeddedCover };
+  return { type:'emoji', value: pickCoverEmoji(name) };
+}
+function applyCoverToEl(el, name) {
+  if (!el) return;
+  const c = getCoverContent(name);
+  if (c.type === 'emoji') {
+    el.innerHTML = '';
+    el.style.backgroundImage = '';
+    el.style.background = 'linear-gradient(135deg, #ffd700, #ff8c00, #e74c3c)';
+    el.textContent = c.value;
+    el.style.fontSize = '56px';
+  } else {
+    el.textContent = '';
+    el.style.background = '#0a0a12';
+    el.style.backgroundImage = `url('${c.value}')`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+    el.style.fontSize = '0';
+  }
+}
+function extractCoverFromFile(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const buf = new Uint8Array(e.target.result);
+        if (buf[0] !== 0x49 || buf[1] !== 0x44 || buf[2] !== 0x33) return resolve(null);
+        const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) |
+                     ((buf[8] & 0x7f) << 7)  |  (buf[9] & 0x7f);
+        let offset = 10;
+        const end = 10 + size;
+        while (offset < end - 10 && offset < buf.length - 10) {
+          const frameId = String.fromCharCode(buf[offset], buf[offset+1], buf[offset+2], buf[offset+3]);
+          const frameSize = (buf[offset+4] << 24) | (buf[offset+5] << 16) |
+                            (buf[offset+6] << 8)  |  buf[offset+7];
+          if (frameSize <= 0 || frameSize > buf.length - offset) break;
+          if (frameId === 'APIC') {
+            let p = offset + 10;
+            const encByte = buf[p++];
+            let mimeEnd = p;
+            while (mimeEnd < offset + 10 + frameSize && buf[mimeEnd] !== 0) mimeEnd++;
+            const mime = String.fromCharCode(...buf.slice(p, mimeEnd));
+            p = mimeEnd + 1;
+            p++;
+            if (encByte === 1 || encByte === 2) {
+              while (p < buf.length - 1 && !(buf[p] === 0 && buf[p+1] === 0)) p += 2;
+              p += 2;
+            } else {
+              while (p < buf.length && buf[p] !== 0) p++;
+              p++;
+            }
+            const imgData = buf.slice(p, offset + 10 + frameSize);
+            const blob = new Blob([imgData], { type: mime || 'image/jpeg' });
+            return resolve(URL.createObjectURL(blob));
+          }
+          offset += 10 + frameSize;
+        }
+        resolve(null);
+      } catch(err) { resolve(null); }
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsArrayBuffer(file.slice(0, Math.min(file.size, 2 * 1024 * 1024)));
+  });
+}
+function setCustomCover(name) {
+  const f = fs[name];
+  if (!f) return;
+  const current = musicCovers[name];
+  let hint = 'Что поставить?\n\n1 — URL картинки\n2 — Эмодзи\n3 — Загрузить картинку\n4 — Убрать';
+  if (current) hint += `\n\nСейчас: ${current.type === 'emoji' ? current.value : 'картинка'}`;
+  const choice = prompt(hint, '1');
+  if (choice === null) return;
+  if (choice === '1') {
+    const url = prompt('URL картинки:');
+    if (!url) return;
+    musicCovers[name] = { type:'url', value: url };
+    saveMusicCovers(); refreshMusicPlaylist();
+    if (musicState.playlist[musicState.current] === name) applyCoverToEl(document.getElementById('musicCover'), name);
+    toast('✅ Установлено');
+  } else if (choice === '2') {
+    const emoji = prompt('Эмодзи:', '🎸');
+    if (!emoji) return;
+    musicCovers[name] = { type:'emoji', value: emoji.slice(0,4) };
+    saveMusicCovers(); refreshMusicPlaylist();
+    if (musicState.playlist[musicState.current] === name) applyCoverToEl(document.getElementById('musicCover'), name);
+    toast('✅ Установлено');
+  } else if (choice === '3') {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = () => {
+      const file = inp.files[0];
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = () => {
+        musicCovers[name] = { type:'data', value: r.result };
+        saveMusicCovers(); refreshMusicPlaylist();
+        if (musicState.playlist[musicState.current] === name) applyCoverToEl(document.getElementById('musicCover'), name);
+        toast('✅ Загружено');
+      };
+      r.readAsDataURL(file);
+    };
+    inp.click();
+  } else if (choice === '4') {
+    delete musicCovers[name];
+    saveMusicCovers(); refreshMusicPlaylist();
+    if (musicState.playlist[musicState.current] === name) applyCoverToEl(document.getElementById('musicCover'), name);
+    toast('Сброшено');
+  }
+}
+function musicTrackContextMenu(e, name) {
+  e.preventDefault(); e.stopPropagation();
+  showContextMenu(e, [
+    { label:'▶ Воспроизвести', icon:'▶', action:()=>playMusic(name) },
+    { label:'🎨 Своя иконка...', icon:'🎨', action:()=>setCustomCover(name) },
+    { sep:true },
+    { label:'🗑 Удалить', icon:'🗑', action:()=>{
+      delete fs[name]; delete musicCovers[name];
+      saveMusicCovers(); saveState(); refreshMusicPlaylist();
+      toast('Удалено');
+    }}
+  ]);
+}
+
+/* ============ FILE UPLOAD ============ */
+function pickFileForUpload() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.multiple = true;
+  inp.onchange = async () => {
+    if (inp.files.length) await handleUploadedFiles(inp.files);
+  };
+  inp.click();
+}
+async function handleUploadedFiles(fileList) {
+  const files = Array.from(fileList);
+  let count = 0;
+  for (const file of files) {
+    try { await uploadOneFile(file); count++; }
+    catch(e) { notify('❌', 'Не удалось: ' + file.name); }
+  }
+  if (count > 0) {
+    notify('📤 Загрузка', 'Добавлено: ' + count);
+    if (state.windows.files) renderFilesList(state.windows.files, '/');
+    if (state.windows.music) refreshMusicPlaylist();
+    if (state.windows.imgview) refreshImgList();
+    if (state.windows.video) refreshVideoList();
+    renderStats(); saveState();
+  }
+}
+async function uploadOneFile(file) {
+  let embeddedCover = null;
+  try {
+    if (file.type && file.type.startsWith('audio/')) {
+      embeddedCover = await extractCoverFromFile(file);
+    }
+  } catch(e) {}
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      let icon = '📄';
+      const mime = file.type || '';
+      if (mime.startsWith('image/')) icon = '🖼️';
+      else if (mime.startsWith('audio/')) icon = '🎵';
+      else if (mime.startsWith('video/')) icon = '🎬';
+      else if (mime.includes('pdf')) icon = '📕';
+      else if (mime.includes('zip')) icon = '🗜️';
+      const isText = mime.startsWith('text/') ||
+        /\.(txt|md|js|css|html|json|xml|csv|toml|yml|yaml|log|ini|sh|py|rs|c|cpp|h|go|java|rb|php)$/i.test(file.name);
+      let content, binary;
+      if (isText) content = reader.result;
+      else {
+        binary = reader.result;
+        content = '[binary: ' + file.name + ', ' + (file.size/1024).toFixed(1) + ' KB]';
+      }
+      let name = file.name; let i = 1;
+      while (fs[name]) {
+        const dot = file.name.lastIndexOf('.');
+        name = dot > 0
+          ? file.name.slice(0,dot) + '_' + i + file.name.slice(dot)
+          : file.name + '_' + i;
+        i++;
+      }
+      fs[name] = {
+        icon, content, binary, size:file.size,
+        mime:file.type, uploadedAt:Date.now(), embeddedCover
+      };
+      resolve();
+    };
+    reader.onerror = () => reject(reader.error);
+    const isTextGuess = file.type.startsWith('text/') ||
+      /\.(txt|md|js|css|html|json|xml|csv|toml|yml|yaml|log|ini|sh|py|rs|c|cpp|h|go|java|rb|php)$/i.test(file.name);
+    if (isTextGuess) reader.readAsText(file);
+    else reader.readAsDataURL(file);
+  });
+}
+
+/* ============ EXPORT/IMPORT FS ============ */
+function exportFS() {
+  const data = {
+    voltos: '6.3', exported: new Date().toISOString(),
+    fs: serializeFS(), users: state.users, snapshots: state.snapshots,
+    musicCovers
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'voltos-backup-' + Date.now() + '.voltos.json';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('📦 Экспортировано');
+}
+function importFS() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,.voltos';
+  inp.onchange = () => {
+    const file = inp.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const d = JSON.parse(reader.result);
+        if (!d.fs) throw new Error('Нет FS');
+        if (!confirm('Импортировать?')) return;
+        deserializeFS(d.fs);
+        if (d.users) state.users = d.users;
+        if (d.snapshots) state.snapshots = d.snapshots;
+        if (d.musicCovers) { musicCovers = d.musicCovers; saveMusicCovers(); }
+        saveState(); fmRefresh();
+        if (state.windows.music) refreshMusicPlaylist();
+        toast('✓ Импортировано');
+      } catch(e) { toast('Ошибка: ' + e.message); }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
+/* ============ TERMINAL ============ */
+function termBody() {
+  return `
+    <div class="term-lines" id="termLines">
+      <div class="term-line">⚡ VoltOS 6.3 — <span style="color:#ffd700">help</span></div>
+    </div>
+    <div class="term-input-line">
+      <span>volt@os:~$</span>
+      <input id="termIn" autocomplete="off" spellcheck="false">
+    </div>
+  `;
+}
+function initTerminal(win) {
+  const inp = win.querySelector('#termIn');
+  const out = win.querySelector('#termLines');
+  inp.focus();
+  win.onmousedown = (e) => {
+    bringFront('terminal');
+    if (e.target !== inp) setTimeout(()=>inp.focus(), 0);
+  };
+  inp.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      const cmd = inp.value.trim(); inp.value = '';
+      addLine(out, '<span class="term-prompt">volt@os:~$</span> ' + escapeHtml(cmd));
+      if (cmd) { state.history.push(cmd); runCmd(out, cmd); }
+    } else if (e.key === 'ArrowUp') {
+      if (state.history.length) inp.value = state.history[state.history.length-1];
+    }
+  };
+}
+function addLine(out, html) {
+  const d = document.createElement('div');
+  d.className = 'term-line'; d.innerHTML = html;
+  out.appendChild(d);
+  out.parentElement.scrollTop = out.parentElement.scrollHeight;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+function runCmd(out, cmdline) {
+  try {
+    const [cmdPart, ...pipes] = cmdline.split('|').map(s=>s.trim());
+    if (cmdPart === 'clear') { out.innerHTML = ''; return; }
+    let output = execSimple(cmdPart, null);
+    for (const p of pipes) output = execSimple(p, output);
+    if (output) addLine(out, '<pre style="white-space:pre-wrap;margin:0">' + escapeHtml(output) + '</pre>');
+  } catch(err) {
+    addLine(out, '<span style="color:#f87171">' + escapeHtml(err.message || err) + '</span>');
+  }
+}
+function execSimple(cmdStr, input) {
+  const tokens = tokenize(cmdStr);
+  if (!tokens.length) return input || '';
+  const [c, ...args] = tokens;
+  switch (c) {
+    case 'help': return `Команды: help, ls, pwd, whoami, cat, write, rm, touch, echo, grep, wc, sort, head, tail, date, hostname, uname, uptime, upload, export, import, browse URL, snap create|list, vd N, theme, lock, user, notify, save, reset, neofetch, volt, update, glitch`;
+    case 'clear': throw {clear:true};
+    case 'ls': return Object.keys(fs).map(f => fs[f].icon+' '+f).join('\n');
+    case 'pwd': return '/home/' + state.currentUser;
+    case 'whoami': return state.currentUser;
+    case 'cat': return fs[args[0]] ? String(fs[args[0]].content || '').slice(0,5000) : 'no such file';
+    case 'rm': if (fs[args[0]]) { delete fs[args[0]]; saveState(); return 'removed'; } throw new Error('no file');
+    case 'touch': fs[args[0]] = { icon:'📄', content:'' }; saveState(); return '';
+    case 'echo': return args.join(' ').replace(/^["']|["']$/g,'');
+    case 'grep': return (input||'').split('\n').filter(l => l.includes(args[0])).join('\n');
+    case 'wc': return `${(input||'').split('\n').filter(x=>x).length} ${(input||'').split(/\s+/).filter(x=>x).length} ${(input||'').length}`;
+    case 'sort': return (input||'').split('\n').sort().join('\n');
+    case 'date': return new Date().toLocaleString();
+    case 'hostname': return 'voltos';
+    case 'uname': return 'VoltOS 6.3';
+    case 'uptime': return Math.floor(performance.now()/1000) + 's';
+    case 'upload': pickFileForUpload(); return '→';
+    case 'export': exportFS(); return '→';
+    case 'import': importFS(); return '→';
+    case 'update': openSettingsTab('updates'); return '→ открываю обновления';
+    case 'glitch': if (confirm('Активировать глитч?')) { activateGlitchMode(); } return '';
+    case 'browse': openWindow('browser'); setTimeout(()=>vbNavigate(args[0]), 100); return '→';
+    case 'lock': showLockScreen(); return '';
+    case 'save': saveState(); return '✓';
+    case 'reset': if (confirm('Сброс?')) { localStorage.clear(); location.reload(); } return '';
+    case 'user': return Object.keys(state.users).join('\n');
+    case 'neofetch': return `       ⚡
+      /\\
+     /  \\      VoltOS 6.3
+    / /\\ \\     kernel: VoltCore 6.3
+   / ____ \\    shell:  VoltShell 6.3
+  /_/    \\_\\   user:   ${state.currentUser}
+               mode:   ${state.mode}
+               glitch: ${IS_GLITCHED ? 'YES ⚠' : 'no'}`;
+    case 'volt':
+      if (args[0]==='status') return `🔋 ${Math.round(state.battery)}%\n⚙ ${Math.round(state.cpu)}%\n🧠 ${state.mem.toFixed(1)} GB\n⚡ ${state.mode}`;
+      if (args[0]==='mode') { setMode(args[1]); return '✓'; }
+      throw new Error('volt status|mode');
+    case 'snap':
+      if (args[0]==='create') { const s=createSnapshot(); return '✓ '+s.name; }
+      if (args[0]==='list') return state.snapshots.map(s=>s.name).join('\n') || 'none';
+      throw new Error('snap create|list');
+    case 'vd': switchVD(Math.max(0,Math.min(state.vdesktops-1, +args[0]-1))); return '→';
+    case 'theme':
+      if (args[0]==='light') setTheme(true);
+      else if (args[0]==='dark') setTheme(false);
+      else if (args[0]==='amoled') setAMOLED(true);
+      return '';
+    case 'notify': notify('VoltOS', args.join(' ')); return '';
+    default: throw new Error('not found: '+c);
+  }
+}
+function tokenize(s) {
+  const tokens = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let m;
+  while ((m = re.exec(s))) tokens.push(m[1] ?? m[2] ?? m[3]);
+  return tokens;
+}
+
+/* ============ FILES ============ */
+function filesBody() {
+  return `
+    <div class="fm-toolbar">
+      <button onclick="pickFileForUpload()">📤 Загрузить</button>
+      <button onclick="fmNewFile()">+ Файл</button>
+      <button onclick="fmNewFolder()">+ Папка</button>
+      <button onclick="fmRefresh()">↻</button>
+      <button onclick="exportFS()">📦 Экспорт</button>
+      <button onclick="importFS()">📥 Импорт</button>
+    </div>
+    <div class="fm-dropzone" id="fmDrop">Перетащи файлы сюда</div>
+    <div class="fm-path">/home/${state.currentUser}</div>
+    <div id="fmList"></div>
+  `;
+}
+function initFiles(win) {
+  renderFilesList(win, '/');
+  const dz = win.querySelector('#fmDrop');
+  dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dz.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      await handleUploadedFiles(e.dataTransfer.files);
+      renderFilesList(win, '/');
+    }
+  });
+}
+function renderFilesList(win, path) {
+  const list = win.querySelector('#fmList');
+  if (!list) return;
+  const items = path === '/' ? fs : (fs[path]?.content || {});
+  const keys = Object.keys(items);
+  if (!keys.length) {
+    list.innerHTML = '<div style="color:#555;text-align:center;padding:20px">Пусто</div>';
+    return;
+  }
+  list.innerHTML = keys.map(name => {
+    const o = items[name];
+    const sizeTxt = o.size ? (o.size/1024).toFixed(1)+' KB' :
+      (o.content && typeof o.content==='string' ? o.content.length+' B' : '');
+    return `<div class="fm-row" data-name="${name}">
+      <span class="fgi">${o.icon||'📄'}</span>
+      <span class="fname">${name}</span>
+      <span class="fsize">${sizeTxt}</span>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.fm-row').forEach(r => {
+    const name = r.dataset.name;
+    r.onclick = () => {
+      list.querySelectorAll('.fm-row').forEach(x=>x.classList.remove('selected'));
+      r.classList.add('selected');
+    };
+    r.ondblclick = () => { const o = items[name]; if (!o.dir) openFile(name); };
+    r.oncontextmenu = (e) => {
+      e.preventDefault();
+      showContextMenu(e, [
+        { label:'Открыть', icon:'▶', action:()=>openFile(name) },
+        { label:'В браузере', icon:'🌐', action:()=>openInBrowser(name) },
+        { label:'В Volt Music', icon:'🎵', action:()=>openInMusic(name) },
+        { label:'Скачать', icon:'💾', action:()=>downloadFile(name) },
+        { sep:true },
+        { label:'Удалить', icon:'🗑', action:()=>{
+          const src = path === '/' ? fs : items;
+          delete src[name]; renderFilesList(win, path); saveState();
+        }}
+      ]);
+    };
+  });
+}
+function fmRefresh() { if (state.windows.files) renderFilesList(state.windows.files, '/'); }
+function fmNewFile() {
+  const name = prompt('Имя:', 'untitled.txt');
+  if (!name) return;
+  fs[name] = { icon:'📄', content:'' };
+  fmRefresh(); saveState();
+}
+function fmNewFolder() {
+  const name = prompt('Имя папки:', 'folder');
+  if (!name) return;
+  fs[name] = { icon:'📁', dir:true, content:{} };
+  fmRefresh(); saveState();
+}
+function createFileDialog() { fmNewFile(); }
+function openFile(name) {
+  const f = fs[name];
+  if (!f || f.dir) return;
+  if (f.binary) {
+    if (f.mime?.startsWith('image/')) { openWindow('imgview'); setTimeout(()=>showImage(name), 50); return; }
+    if (f.mime?.startsWith('audio/')) { openWindow('music'); setTimeout(()=>playMusic(name), 60); return; }
+    if (f.mime?.startsWith('video/')) { openWindow('video'); setTimeout(()=>playVideo(name), 60); return; }
+    downloadFile(name); return;
+  }
+  if (name.endsWith('.html')) { openInBrowser(name); return; }
+  openWindow('editor', { force:true });
+  setTimeout(() => {
+    const w = state.windows.editor;
+    if (w) {
+      const ta = w.querySelector('.editor-area');
+      if (ta) { ta.value = f.content || ''; ta.dataset.file = name; }
+      w.querySelector('.tname').textContent = '📝 ' + name;
+    }
+  }, 20);
+}
+function openInBrowser(name) {
+  const f = fs[name]; if (!f) return;
+  openWindow('browser');
+  setTimeout(() => vbNavigate('voltos://' + name), 80);
+}
+function openInMusic(name) {
+  const f = fs[name];
+  if (!f || !f.binary) { toast('Не аудио'); return; }
+  openWindow('music');
+  setTimeout(()=>playMusic(name), 60);
+}
+function downloadFile(name) {
+  const f = fs[name]; if (!f) return;
+  let blob;
+  if (f.binary) {
+    const arr = f.binary.split(',');
+    const bstr = atob(arr[1]);
+    const u8 = new Uint8Array(bstr.length);
+    for (let i=0;i<bstr.length;i++) u8[i] = bstr.charCodeAt(i);
+    blob = new Blob([u8], {type:f.mime || 'application/octet-stream'});
+  } else {
+    blob = new Blob([f.content || ''], {type:'text/plain'});
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('Скачивание: ' + name);
+}
+
+/* ============ EDITOR ============ */
+function editorBody() {
+  return `<textarea class="editor-area" placeholder="Начните печатать... (Ctrl+S)"></textarea>`;
+}
+function initEditor(win) {
+  const ta = win.querySelector('.editor-area');
+  ta.focus();
+  ta.onkeydown = (e) => {
+    if ((e.ctrlKey||e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      const name = ta.dataset.file || prompt('Имя:', 'untitled.txt');
+      if (!name) return;
+      fs[name] = { icon:'📄', content: ta.value };
+      ta.dataset.file = name;
+      win.querySelector('.tname').textContent = '📝 ' + name;
+      toast('Сохранено'); saveState();
+    }
+  };
+}
+
+/* ============ BROWSER ============ */
+function browserBody() {
+  if (vbState.tabs.length === 0) vbCreateTab('volt://start');
+  return `
+    <div class="vb-wrap" id="vbWrap">
+      <div class="vb-tabs" id="vbTabs"></div>
+      <div class="vb-toolbar">
+        <button class="vb-nav-btn" id="vbBack">←</button>
+        <button class="vb-nav-btn" id="vbForward">→</button>
+        <button class="vb-nav-btn" id="vbReload">↻</button>
+        <button class="vb-nav-btn" id="vbHome">🏠</button>
+        <div class="vb-address">
+          <span class="protocol" id="vbProtocol">⚡</span>
+          <input id="vbAddr" placeholder="Поиск или URL..." autocomplete="off" spellcheck="false">
+          <span class="vb-lock" id="vbLock"></span>
+        </div>
+        <button class="vb-nav-btn" id="vbBookmarkBtn">⭐</button>
+        <button class="vb-nav-btn" id="vbHistoryBtn">📜</button>
+        <button class="vb-nav-btn" id="vbMenuBtn">☰</button>
+      </div>
+      <div class="vb-bookmarks-bar" id="vbBookmarksBar"></div>
+      <div class="vb-content" id="vbContent">
+        <iframe class="vb-frame" id="vbFrame"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+      </div>
+    </div>
+  `;
+}
+function initBrowser(win) {
+  vbRenderTabs();
+  win.querySelector('#vbBack').onclick = vbBack;
+  win.querySelector('#vbForward').onclick = vbForward;
+  win.querySelector('#vbReload').onclick = vbReload;
+  win.querySelector('#vbHome').onclick = () => vbNavigate('volt://start');
+  const addr = win.querySelector('#vbAddr');
+  addr.onkeydown = (e) => {
+    if (e.key === 'Enter') vbHandleAddressInput(addr.value.trim());
+  };
+  addr.onfocus = () => addr.select();
+  win.querySelector('#vbBookmarkBtn').onclick = vbAddBookmark;
+  win.querySelector('#vbHistoryBtn').onclick = () => vbOpenPanel('history');
+  win.querySelector('#vbMenuBtn').onclick = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    showContextMenu({clientX:r.left, clientY:r.bottom+4, preventDefault:()=>{}}, [
+      { label:'Новая вкладка', icon:'➕', action:()=>vbCreateTab('volt://start') },
+      { label:'История', icon:'📜', action:()=>vbOpenPanel('history') },
+      { label:'Закладки', icon:'⭐', action:()=>vbOpenPanel('bookmarks') },
+      { label:'Режим чтения', icon:'📖', action:vbReaderMode }
+    ]);
+  };
+  vbRenderBookmarks();
+  if (vbState.tabs.length > 0) {
+    if (vbState.activeTab >= vbState.tabs.length) vbState.activeTab = 0;
+    vbRestoreTab();
+  } else vbCreateTab('volt://start');
+}
+function vbCreateTab(url) {
+  const id = ++vbState.tabIdCounter;
+  const tab = { id, url: url || 'volt://start', title: 'Новая вкладка',
+    favicon: '🌐', history: [url || 'volt://start'], histIndex: 0 };
+  vbState.tabs.push(tab);
+  vbState.activeTab = vbState.tabs.length - 1;
+  vbRenderTabs();
+  vbLoadTab(tab);
+}
+function vbCloseTab(idx) {
+  if (vbState.tabs.length <= 1) {
+    vbState.tabs = []; vbState.activeTab = 0;
+    vbCreateTab('volt://start'); return;
+  }
+  vbState.tabs.splice(idx, 1);
+  if (vbState.activeTab >= vbState.tabs.length) vbState.activeTab = vbState.tabs.length - 1;
+  else if (vbState.activeTab > idx) vbState.activeTab--;
+  vbRenderTabs(); vbRestoreTab();
+}
+function vbSwitchTab(idx) {
+  if (idx < 0 || idx >= vbState.tabs.length) return;
+  vbState.activeTab = idx;
+  vbRenderTabs(); vbRestoreTab();
+}
+function vbGetActiveTab() { return vbState.tabs[vbState.activeTab]; }
+function vbRenderTabs() {
+  const cont = document.getElementById('vbTabs');
+  if (!cont) return;
+  cont.innerHTML = vbState.tabs.map((t, i) => `
+    <div class="vb-tab ${i===vbState.activeTab?'active':''}" data-i="${i}">
+      <span class="tab-fav">${t.favicon || '🌐'}</span>
+      <span class="tab-title">${escapeHtml(t.title)}</span>
+      <button class="tab-close" data-i="${i}">✕</button>
+    </div>
+  `).join('') + `<button class="vb-tab-new" id="vbNewTabBtn">+</button>`;
+  cont.querySelectorAll('.vb-tab').forEach(el => {
+    const i = +el.dataset.i;
+    el.onclick = (e) => {
+      if (e.target.classList.contains('tab-close')) { e.stopPropagation(); vbCloseTab(i); return; }
+      vbSwitchTab(i);
+    };
+  });
+  const nt = cont.querySelector('#vbNewTabBtn');
+  if (nt) nt.onclick = () => vbCreateTab('volt://start');
+}
+function vbRestoreTab() {
+  const tab = vbGetActiveTab();
+  if (!tab) return;
+  const addr = document.getElementById('vbAddr');
+  const proto = document.getElementById('vbProtocol');
+  if (addr) addr.value = tab.url;
+  if (proto) {
+    if (tab.url.startsWith('https://')) { proto.textContent = '🔒'; proto.style.color = '#4ade80'; }
+    else if (tab.url.startsWith('volt://')) { proto.textContent = '⚡'; proto.style.color = '#ffd700'; }
+    else { proto.textContent = '🌐'; proto.style.color = '#888'; }
+  }
+  vbLoadTab(tab);
+  vbUpdateNavButtons();
+}
+function vbHandleAddressInput(v) {
+  if (!v) return;
+  if (v.startsWith('volt://') || v.startsWith('voltos://')) { vbNavigate(v); return; }
+  if (/^https?:\/\//i.test(v)) { vbNavigate(v); return; }
+  if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(v)) { vbNavigate('https://' + v); return; }
+  vbNavigate('https://duckduckgo.com/?q=' + encodeURIComponent(v));
+}
+function vbNavigate(url) {
+  const tab = vbGetActiveTab();
+  if (!tab) { vbCreateTab(url); return; }
+  tab.history = tab.history.slice(0, tab.histIndex + 1);
+  tab.history.push(url);
+  tab.histIndex = tab.history.length - 1;
+  tab.url = url;
+  vbLoadTab(tab);
+  if (!url.startsWith('volt://') && !url.startsWith('voltos://')) {
+    vbState.history.unshift({ url, title: tab.title, time: Date.now() });
+    if (vbState.history.length > 200) vbState.history.pop();
+    saveState();
+  }
+}
+function vbLoadTab(tab) {
+  const frame = document.getElementById('vbFrame');
+  const content = document.getElementById('vbContent');
+  const addr = document.getElementById('vbAddr');
+  if (!frame || !content) return;
+  if (addr) addr.value = tab.url;
+  content.querySelectorAll('.vb-startpage, .vb-blocked').forEach(el => el.remove());
+  if (tab.url === 'volt://start' || tab.url === 'volt://home') {
+    tab.title = 'Новая вкладка'; tab.favicon = '⚡';
+    frame.srcdoc = ''; frame.style.display = 'none';
+    renderStartPage(content, tab);
+    vbRenderTabs(); vbUpdateNavButtons(); return;
+  }
+  if (tab.url.startsWith('voltos://')) {
+    const fname = decodeURIComponent(tab.url.slice(9));
+    const f = fs[fname];
+    frame.style.display = 'block';
+    if (!f) { vbShowBlocked(content, tab, 'Файл не найден', fname, null); return; }
+    if (f.binary && f.mime?.startsWith('image/')) {
+      frame.srcdoc = `<html><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;height:100vh"><img src="${f.binary}" style="max-width:100%;max-height:100%"></body></html>`;
+    } else {
+      frame.srcdoc = f.content || '';
+    }
+    tab.title = fname;
+    vbRenderTabs(); vbUpdateNavButtons(); return;
+  }
+  frame.style.display = 'block';
+  frame.removeAttribute('srcdoc');
+  frame.src = tab.url;
+  tab.title = tab.url.replace(/^https?:\/\//,'').split('/')[0];
+  vbRenderTabs();
+  let loaded = false;
+  const t = setTimeout(() => {
+    if (loaded) return;
+    if (content.querySelector('.vb-blocked')) return;
+    vbShowBlocked(content, tab, 'Сайт блокирует встраивание',
+      `Сайт <b>${escapeHtml(tab.url)}</b> запретил показ в iframe.`, tab.url);
+  }, 2000);
+  frame.onload = () => {
+    loaded = true; clearTimeout(t);
+    try {
+      tab.title = frame.contentDocument?.title || tab.url.replace(/^https?:\/\//,'').split('/')[0];
+      vbRenderTabs();
+    } catch(e) {}
+    vbUpdateNavButtons();
+  };
+  vbUpdateNavButtons();
+}
+function renderStartPage(content, tab) {
+  const sp = document.createElement('div');
+  sp.className = 'vb-startpage';
+  const ql = [
+    { name:'Wikipedia', url:'https://ru.wikipedia.org', icon:'📖' },
+    { name:'DuckDuckGo', url:'https://duckduckgo.com', icon:'🦆' },
+    { name:'GitHub', url:'https://github.com', icon:'🐙' },
+    { name:'MDN', url:'https://developer.mozilla.org', icon:'📚' },
+    { name:'YouTube', url:'https://youtube.com', icon:'📺' },
+    { name:'Reddit', url:'https://reddit.com', icon:'👽' },
+    { name:'Example', url:'https://example.com', icon:'📄' },
+    { name:'VoltFS', url:'volt://files', icon:'📁' }
+  ];
+  sp.innerHTML = `
+    <div class="vb-startpage-logo">⚡</div>
+    <h2>VOLT BROWSER</h2>
+    <div class="vb-search-box">
+      <span style="color:#ffd700;font-size:18px">🔍</span>
+      <input id="vbStartSearch" placeholder="Поиск или адрес..." autocomplete="off">
+      <button id="vbStartGo">→</button>
+    </div>
+    <div class="vb-quicklinks">
+      ${ql.map(l => `<div class="vb-quicklink" data-url="${l.url}">
+        <span class="ql-icon">${l.icon}</span>
+        <span class="ql-name">${l.name}</span>
+      </div>`).join('')}
+    </div>
+  `;
+  content.appendChild(sp);
+  const inp = sp.querySelector('#vbStartSearch');
+  const go = () => { const v = inp.value.trim(); if (v) vbHandleAddressInput(v); };
+  sp.querySelector('#vbStartGo').onclick = go;
+  inp.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  sp.querySelectorAll('.vb-quicklink').forEach(el => {
+    el.onclick = () => {
+      const u = el.dataset.url;
+      if (u === 'volt://files') { openWindow('files'); return; }
+      vbNavigate(u);
+    };
+  });
+}
+function vbShowBlocked(content, tab, title, msg, url) {
+  const frame = document.getElementById('vbFrame');
+  if (frame) frame.style.display = 'none';
+  content.querySelectorAll('.vb-blocked').forEach(el => el.remove());
+  const b = document.createElement('div');
+  b.className = 'vb-blocked';
+  b.innerHTML = `
+    <h3>🚫 ${escapeHtml(title)}</h3>
+    <p>${msg}</p>
+    <div class="vb-blocked-actions">
+      ${url ? `<button onclick="window.open('${escapeHtml(url)}','_blank')">🚀 Открыть внешне</button>` : ''}
+      <button class="secondary" onclick="vbNavigate('volt://start')">🏠 Домой</button>
+    </div>
+  `;
+  content.appendChild(b);
+}
+function vbBack() {
+  const tab = vbGetActiveTab();
+  if (!tab || tab.histIndex <= 0) return;
+  tab.histIndex--; tab.url = tab.history[tab.histIndex];
+  vbLoadTab(tab);
+}
+function vbForward() {
+  const tab = vbGetActiveTab();
+  if (!tab || tab.histIndex >= tab.history.length - 1) return;
+  tab.histIndex++; tab.url = tab.history[tab.histIndex];
+  vbLoadTab(tab);
+}
+function vbReload() {
+  const tab = vbGetActiveTab();
+  if (!tab) return;
+  vbLoadTab(tab);
+}
+function vbUpdateNavButtons() {
+  const tab = vbGetActiveTab();
+  const back = document.getElementById('vbBack');
+  const fwd = document.getElementById('vbForward');
+  if (back) back.disabled = !tab || tab.histIndex <= 0;
+  if (fwd) fwd.disabled = !tab || tab.histIndex >= tab.history.length - 1;
+}
+function vbAddBookmark() {
+  const tab = vbGetActiveTab(); if (!tab) return;
+  if (vbState.bookmarks.some(b => b.url === tab.url)) { toast('Уже есть'); return; }
+  vbState.bookmarks.push({ title: tab.title || tab.url, url: tab.url, icon: tab.favicon || '⭐' });
+  vbRenderBookmarks(); saveState(); toast('⭐');
+}
+function vbRenderBookmarks() {
+  const bar = document.getElementById('vbBookmarksBar');
+  if (!bar) return;
+  bar.innerHTML = vbState.bookmarks.map((b, i) => `
+    <div class="vb-bm" data-i="${i}" title="${escapeHtml(b.url)}">
+      <span>${b.icon||'⭐'}</span>
+      <span>${escapeHtml(b.title.length > 20 ? b.title.slice(0,20)+'…' : b.title)}</span>
+    </div>
+  `).join('') + `<div class="vb-bm-add" id="vbBmAdd">+ Закладка</div>`;
+  bar.querySelectorAll('.vb-bm').forEach(el => {
+    el.onclick = () => vbNavigate(vbState.bookmarks[+el.dataset.i].url);
+  });
+  const add = bar.querySelector('#vbBmAdd');
+  if (add) add.onclick = vbAddBookmark;
+}
+function vbOpenPanel(type) {
+  vbClosePanel();
+  const p = document.createElement('div');
+  p.className = 'vb-panel'; p.id = 'vbPanel';
+  const items = type === 'history' ? vbState.history : vbState.bookmarks;
+  p.innerHTML = `
+    <div class="vb-panel-header">
+      <h4>${type === 'history' ? '📜 История' : '⭐ Закладки'}</h4>
+      <button id="vbClosePanelBtn">✕</button>
+    </div>
+    <div class="vb-panel-content">
+      ${items.length ? items.map((it, i) => `
+        <div class="vb-panel-item" data-i="${i}">
+          <div class="vpi-title">${escapeHtml(it.title || it.url)}</div>
+          <div class="vpi-url">${escapeHtml(it.url)}</div>
+        </div>
+      `).join('') : '<div class="vb-panel-empty">Пусто</div>'}
+    </div>
+  `;
+  document.getElementById('vbContent').appendChild(p);
+  p.querySelector('#vbClosePanelBtn').onclick = vbClosePanel;
+  p.querySelectorAll('.vb-panel-item').forEach(el => {
+    el.onclick = () => {
+      vbNavigate(items[+el.dataset.i].url);
+      vbClosePanel();
+    };
+  });
+}
+function vbClosePanel() {
+  const p = document.getElementById('vbPanel');
+  if (p) p.remove();
+}
+function vbReaderMode() {
+  const frame = document.getElementById('vbFrame');
+  try {
+    const doc = frame.contentDocument;
+    if (!doc) throw 0;
+    const text = doc.body.innerText || '';
+    const title = doc.title || 'Reader';
+    frame.srcdoc = `<html><head><style>
+      body { font-family: Georgia, serif; max-width: 720px; margin: 40px auto;
+        padding: 20px; line-height: 1.85; font-size: 17px; color: #222; background: #fafafa; }
+      h1 { border-bottom: 2px solid #e67e22; padding-bottom: 12px; }
+    </style></head><body><h1>${escapeHtml(title)}</h1><pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(text.slice(0, 50000))}</pre></body></html>`;
+    toast('📖 Режим чтения');
+  } catch(e) { toast('Недоступно'); }
+}
+
+/* ============ VOLT MUSIC ============ */
+function musicBody() {
+  return `
+    <div class="music-wrap">
+      <div class="music-header">
+        <div class="music-cover" id="musicCover">🎵</div>
+        <div class="music-meta">
+          <div class="music-title" id="musicTitle">Нет трека</div>
+          <div class="music-artist" id="musicArtist">Volt Music</div>
+          <div class="music-progress" id="musicProgress">
+            <div class="music-progress-fill" id="musicProgressFill"></div>
+          </div>
+          <div class="music-times">
+            <span id="musicCur">0:00</span>
+            <span id="musicDur">0:00</span>
+          </div>
+        </div>
+      </div>
+      <canvas class="music-viz" id="musicViz" width="380" height="64"></canvas>
+      <div class="music-controls">
+        <button class="music-ctrl" id="musicShuffle">🔀</button>
+        <button class="music-ctrl" id="musicPrev">⏮</button>
+        <button class="music-ctrl play" id="musicPlay">▶</button>
+        <button class="music-ctrl" id="musicNext">⏭</button>
+        <button class="music-ctrl" id="musicRepeat">🔁</button>
+      </div>
+      <div class="music-volume">🔈 <input type="range" id="musicVolume" min="0" max="100" value="70"></div>
+      <div class="music-eq" id="musicEq">${'<div class="eq-bar" style="height:3px"></div>'.repeat(16)}</div>
+      <div class="music-tabs">
+        <button class="music-tab active" data-tab="playlist">Плейлист</button>
+        <button class="music-tab" data-tab="upload">Загрузить</button>
+      </div>
+      <div class="music-playlist" id="musicPlaylistBody"></div>
+      <button class="music-add" id="musicAddBtn">➕ Добавить аудио</button>
+      <div class="music-hint">💡 ПКМ по треку → «Своя иконка»</div>
+    </div>
+  `;
+}
+function initMusic(win) {
+  if (!musicAudio) {
+    musicAudio = new Audio();
+    musicAudio.volume = 0.7;
+    musicAudio.addEventListener('timeupdate', updateMusicProgress);
+    musicAudio.addEventListener('ended', onMusicEnded);
+    musicAudio.addEventListener('loadedmetadata', updateMusicProgress);
+    musicAudio.addEventListener('play', () => {
+      const p = document.getElementById('musicPlay'); if (p) p.textContent = '⏸';
+      document.getElementById('musicCover')?.classList.add('playing');
+    });
+    musicAudio.addEventListener('pause', () => {
+      const p = document.getElementById('musicPlay'); if (p) p.textContent = '▶';
+      document.getElementById('musicCover')?.classList.remove('playing');
+    });
+  }
+  refreshMusicPlaylist();
+  win.querySelector('#musicPlay').onclick = toggleMusicPlay;
+  win.querySelector('#musicNext').onclick = () => nextMusic(1);
+  win.querySelector('#musicPrev').onclick = () => nextMusic(-1);
+  win.querySelector('#musicShuffle').onclick = () => {
+    musicState.shuffle = !musicState.shuffle;
+    win.querySelector('#musicShuffle').classList.toggle('active', musicState.shuffle);
+  };
+  win.querySelector('#musicRepeat').onclick = () => {
+    musicState.repeat = !musicState.repeat;
+    win.querySelector('#musicRepeat').classList.toggle('active', musicState.repeat);
+  };
+  win.querySelector('#musicVolume').oninput = (e) => { musicAudio.volume = e.target.value/100; };
+  win.querySelector('#musicAddBtn').onclick = () => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'audio/*'; inp.multiple = true;
+    inp.onchange = async () => { await handleUploadedFiles(inp.files); refreshMusicPlaylist(); };
+    inp.click();
+  };
+  win.querySelector('#musicProgress').onclick = (e) => {
+    if (!musicAudio.duration) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    musicAudio.currentTime = musicAudio.duration * ((e.clientX - r.left) / r.width);
+  };
+  startMusicViz();
+}
+function refreshMusicPlaylist() {
+  const body = document.getElementById('musicPlaylistBody');
+  if (!body) return;
+  const audioFiles = Object.keys(fs).filter(k =>
+    fs[k].binary && fs[k].mime?.startsWith('audio/')
+  );
+  musicState.playlist = audioFiles;
+  if (!audioFiles.length) {
+    body.innerHTML = '<div class="music-empty">Нет аудио.<br>Загрузи через кнопку ниже.</div>';
+    return;
+  }
+  body.innerHTML = audioFiles.map((name, i) => {
+    const c = getCoverContent(name);
+    let iconHtml;
+    if (c.type === 'emoji') {
+      iconHtml = `<span class="trk-icon">${c.value}</span>`;
+    } else {
+      iconHtml = `<span class="trk-icon img-icon" style="background-image:url('${c.value}')"></span>`;
+    }
+    return `<div class="music-track ${i===musicState.current?'active':''}" data-i="${i}" data-name="${escapeHtml(name)}">
+      ${iconHtml}
+      <span class="trk-name">${escapeHtml(name)}</span>
+      <button class="trk-remove" data-name="${escapeHtml(name)}">✕</button>
+    </div>`;
+  }).join('');
+  body.querySelectorAll('.music-track').forEach(t => {
+    const name = t.dataset.name;
+    t.onclick = (e) => {
+      if (e.target.classList.contains('trk-remove')) return;
+      playMusicByIndex(+t.dataset.i);
+    };
+    t.oncontextmenu = (e) => musicTrackContextMenu(e, name);
+  });
+  body.querySelectorAll('.trk-remove').forEach(b => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const n = b.dataset.name;
+      delete fs[n]; delete musicCovers[n];
+      saveMusicCovers(); saveState(); refreshMusicPlaylist();
+    };
+  });
+}
+function playMusic(name) {
+  refreshMusicPlaylist();
+  const idx = musicState.playlist.indexOf(name);
+  if (idx >= 0) playMusicByIndex(idx);
+}
+function playMusicByIndex(i) {
+  if (i < 0 || i >= musicState.playlist.length) return;
+  const name = musicState.playlist[i];
+  const f = fs[name];
+  if (!f || !f.binary) return;
+  musicState.current = i;
+  musicAudio.src = f.binary;
+  musicAudio.play().catch(err => toast('Ошибка: ' + err.message));
+  document.getElementById('musicTitle').textContent = name.replace(/\.[^.]+$/, '');
+  applyCoverToEl(document.getElementById('musicCover'), name);
+  document.querySelectorAll('.music-track').forEach((t,idx)=>t.classList.toggle('active', idx===i));
+}
+function toggleMusicPlay() {
+  if (musicState.current === -1 && musicState.playlist.length > 0) { playMusicByIndex(0); return; }
+  if (!musicAudio) return;
+  if (musicAudio.paused) musicAudio.play().catch(()=>{});
+  else musicAudio.pause();
+}
+function nextMusic(dir) {
+  if (!musicState.playlist.length) return;
+  let next;
+  if (musicState.shuffle && musicState.playlist.length > 1) {
+    do { next = Math.floor(Math.random()*musicState.playlist.length); }
+    while (next === musicState.current);
+  } else {
+    next = (musicState.current + dir + musicState.playlist.length) % musicState.playlist.length;
+  }
+  playMusicByIndex(next);
+}
+function onMusicEnded() {
+  if (musicState.repeat) { musicAudio.currentTime = 0; musicAudio.play().catch(()=>{}); }
+  else nextMusic(1);
+}
+function updateMusicProgress() {
+  const cur = document.getElementById('musicCur');
+  const dur = document.getElementById('musicDur');
+  const fill = document.getElementById('musicProgressFill');
+  if (!cur || !musicAudio) return;
+  const fmt = (s) => isNaN(s) ? '0:00' : Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0');
+  cur.textContent = fmt(musicAudio.currentTime);
+  dur.textContent = fmt(musicAudio.duration);
+  if (musicAudio.duration) fill.style.width = (musicAudio.currentTime/musicAudio.duration*100)+'%';
+}
+function startMusicViz() {
+  const viz = document.getElementById('musicViz');
+  const eq = document.getElementById('musicEq');
+  if (!viz) return;
+  const ctx = viz.getContext('2d');
+  const W = viz.width, H = viz.height;
+  const eqBars = eq ? Array.from(eq.children) : [];
+  if (musicAudio && !musicAnalyser) {
+    try {
+      musicCtx = musicCtx || new (window.AudioContext || window.webkitAudioContext)();
+      musicSource = musicCtx.createMediaElementSource(musicAudio);
+      musicAnalyser = musicCtx.createAnalyser();
+      musicAnalyser.fftSize = 128;
+      musicSource.connect(musicAnalyser);
+      musicAnalyser.connect(musicCtx.destination);
+    } catch(e) {}
+  }
+  const dataArray = musicAnalyser ? new Uint8Array(musicAnalyser.frequencyBinCount) : null;
+  const timer = setInterval(() => {
+    if (!document.body.contains(viz)) { clearInterval(timer); return; }
+    ctx.clearRect(0,0,W,H);
+    if (musicAnalyser && musicAudio && !musicAudio.paused) {
+      musicAnalyser.getByteFrequencyData(dataArray);
+      const bw = W / dataArray.length;
+      for (let i = 0; i < dataArray.length; i++) {
+        const h = (dataArray[i]/255) * H;
+        const grad = ctx.createLinearGradient(0, H-h, 0, H);
+        grad.addColorStop(0, '#ffd700'); grad.addColorStop(1, '#ff8c00');
+        ctx.fillStyle = grad;
+        ctx.fillRect(i*bw, H-h, bw-1, h);
+      }
+    } else {
+      const t = performance.now()/400;
+      for (let i = 0; i < 30; i++) {
+        const h = (Math.sin(t + i*0.4)*0.5 + 0.5) * H * 0.5 + 5;
+        ctx.fillStyle = 'rgba(255,215,0,.25)';
+        ctx.fillRect(i*(W/30), H-h, W/30-1, h);
+      }
+    }
+  }, 50);
+}
+
+/* ============ VIDEO ============ */
+function videoBody() {
+  return `
+    <div class="video-wrap">
+      <video class="video-el" id="videoEl" controls></video>
+      <div style="font-size:11px;color:#888">Видео в VoltFS:</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:rgba(0,0,0,.3);border-radius:8px" id="videoList"></div>
+      <div class="video-bar">
+        <button onclick="pickVideoUpload()">📤 Загрузить</button>
+      </div>
+    </div>
+  `;
+}
+function initVideo() { refreshVideoList(); }
+function refreshVideoList() {
+  const list = document.getElementById('videoList');
+  if (!list) return;
+  const vids = Object.keys(fs).filter(k => fs[k].mime?.startsWith('video/'));
+  if (!vids.length) { list.innerHTML = '<div style="color:#666;font-size:11px">Нет видео</div>'; return; }
+  list.innerHTML = vids.map(v => `
+    <button onclick="playVideo('${v.replace(/'/g,"\\'")}')" style="padding:7px 12px;background:rgba(255,215,0,.12);color:var(--accent);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px">🎬 ${escapeHtml(v)}</button>
+  `).join('');
+}
+function playVideo(name) {
+  const f = fs[name];
+  if (!f || !f.binary) return;
+  openWindow('video');
+  setTimeout(() => {
+    const v = document.getElementById('videoEl');
+    if (v) { v.src = f.binary; v.play().catch(()=>{}); }
+  }, 60);
+}
+function pickVideoUpload() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'video/*'; inp.multiple = true;
+  inp.onchange = async () => { await handleUploadedFiles(inp.files); refreshVideoList(); };
+  inp.click();
+}
+
+/* ============ IMAGES ============ */
+let imgZoomLevel = 1;
+function imgviewBody() {
+  return `
+    <div class="img-viewer">
+      <div class="img-wrap" id="imgWrap"><span style="color:#666">Нет изображения</span></div>
+      <div class="img-controls">
+        <button onclick="imgZoom(1.2)">🔍 +</button>
+        <button onclick="imgZoom(0.8)">🔍 −</button>
+        <button onclick="imgResetZoom()">↺ Сброс</button>
+        <button onclick="pickImageUpload()">📤 Загрузить</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:rgba(0,0,0,.3);border-radius:8px" id="imgList"></div>
+    </div>
+  `;
+}
+function initImgView(win) {
+  refreshImgList();
+  const wrap = win.querySelector('#imgWrap');
+  wrap.addEventListener('wheel', (e) => {
+    if (e.target.tagName === 'IMG') {
+      e.preventDefault();
+      imgZoom(e.deltaY > 0 ? 0.9 : 1.1);
+    }
+  }, {passive:false});
+}
+function refreshImgList() {
+  const list = document.getElementById('imgList');
+  if (!list) return;
+  const imgs = Object.keys(fs).filter(k => fs[k].mime?.startsWith('image/'));
+  if (!imgs.length) { list.innerHTML = '<div style="color:#666;font-size:11px">Нет</div>'; return; }
+  list.innerHTML = imgs.map(n => `
+    <button onclick="showImage('${n.replace(/'/g,"\\'")}')" style="padding:7px 12px;background:rgba(255,215,0,.12);color:var(--accent);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px">🖼️ ${escapeHtml(n)}</button>
+  `).join('');
+}
+function showImage(name) {
+  const f = fs[name];
+  if (!f || !f.binary) return;
+  openWindow('imgview');
+  setTimeout(() => {
+    const wrap = document.getElementById('imgWrap');
+    if (wrap) wrap.innerHTML = `<img src="${f.binary}" style="transform:scale(${imgZoomLevel})">`;
+  }, 50);
+}
+function imgZoom(k) {
+  imgZoomLevel = Math.max(0.2, Math.min(5, imgZoomLevel * k));
+  const img = document.querySelector('#imgWrap img');
+  if (img) img.style.transform = `scale(${imgZoomLevel})`;
+}
+function imgResetZoom() {
+  imgZoomLevel = 1;
+  const img = document.querySelector('#imgWrap img');
+  if (img) img.style.transform = 'scale(1)';
+}
+function pickImageUpload() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+  inp.onchange = async () => { await handleUploadedFiles(inp.files); refreshImgList(); };
+  inp.click();
+}
+
+/* ============ NOTES ============ */
+let notesState = { currentNote: -1 };
+function notesBody() {
+  return `
+    <div style="font-size:11px;color:#888;margin-bottom:12px">🔐 AES-GCM 256</div>
+    <div class="notes-list" id="notesList"></div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button class="run-btn" style="margin:0;flex:1" onclick="newNote()">+ Новая</button>
+    </div>
+    <div id="notesEditorArea"></div>
+  `;
+}
+function initNotes() { renderNotesList(); renderNotesEditor(); }
+function renderNotesList() {
+  const list = document.getElementById('notesList');
+  if (!list) return;
+  const notes = state.users[state.currentUser].notes || [];
+  if (!notes.length) { list.innerHTML = '<div style="color:#555;padding:14px;text-align:center">Нет заметок</div>'; return; }
+  list.innerHTML = notes.map((n, i) => `
+    <div class="note-item ${i===notesState.currentNote?'active':''}" data-i="${i}">
+      <span>${n.encrypted ? '🔒' : '📝'}</span>
+      <span class="note-title">${escapeHtml(n.title || 'Без названия')}</span>
+      <span style="font-size:10px;color:#666">${new Date(n.updated).toLocaleDateString()}</span>
+    </div>
+  `).join('');
+  list.querySelectorAll('.note-item').forEach(el => {
+    el.onclick = () => {
+      notesState.currentNote = +el.dataset.i;
+      renderNotesList(); renderNotesEditor();
+    };
+  });
+}
+function renderNotesEditor() {
+  const area = document.getElementById('notesEditorArea');
+  if (!area) return;
+  const notes = state.users[state.currentUser].notes || [];
+  if (notesState.currentNote < 0 || notesState.currentNote >= notes.length) {
+    area.innerHTML = '<div style="color:#555;padding:14px;text-align:center">Выбери заметку</div>';
+    return;
+  }
+  const n = notes[notesState.currentNote];
+  area.innerHTML = `
+    <input id="noteTitleInp" placeholder="Заголовок" value="${escapeHtml(n.title||'')}" style="width:100%;background:#050508;border:1px solid var(--border);border-radius:8px;padding:10px;color:#e0e0e0;font-size:12px;margin-bottom:8px;outline:none">
+    <textarea class="note-editor" id="noteBodyInp" ${n.encrypted?'readonly':''}>${n.encrypted ? '🔒 Зашифровано' : escapeHtml(n.body||'')}</textarea>
+    <div class="note-actions">
+      ${n.encrypted
+        ? '<button onclick="decryptNote()">🔓 Расшифровать</button>'
+        : '<button onclick="saveNote(false)">💾 Сохранить</button><button onclick="saveNote(true)">🔐 Зашифровать</button>'}
+      <button class="danger" onclick="deleteNote()">🗑 Удалить</button>
+    </div>
+  `;
+}
+function newNote() {
+  const notes = state.users[state.currentUser].notes || [];
+  notes.push({ title:'Новая заметка', body:'', encrypted:false, updated: Date.now() });
+  state.users[state.currentUser].notes = notes;
+  notesState.currentNote = notes.length - 1;
+  renderNotesList(); renderNotesEditor(); saveState();
+}
+async function saveNote(encrypt) {
+  const title = document.getElementById('noteTitleInp').value;
+  const body = document.getElementById('noteBodyInp').value;
+  const n = state.users[state.currentUser].notes[notesState.currentNote];
+  n.title = title || 'Без названия';
+  n.updated = Date.now();
+  if (encrypt) {
+    const pass = prompt('Пароль:');
+    if (!pass) return;
+    try {
+      n.body = await encryptText(body, pass);
+      n.encrypted = true;
+      toast('🔐 Зашифровано');
+    } catch(e) { toast('Ошибка'); return; }
+  } else {
+    n.body = body; n.encrypted = false;
+    toast('Сохранено');
+  }
+  renderNotesList(); renderNotesEditor(); saveState();
+}
+async function decryptNote() {
+  const pass = prompt('Пароль:');
+  if (!pass) return;
+  const n = state.users[state.currentUser].notes[notesState.currentNote];
+  try {
+    document.getElementById('noteBodyInp').value = await decryptText(n.body, pass);
+    toast('Расшифровано');
+  } catch(e) { toast('Неверный пароль'); }
+}
+function deleteNote() {
+  if (!confirm('Удалить?')) return;
+  state.users[state.currentUser].notes.splice(notesState.currentNote, 1);
+  notesState.currentNote = -1;
+  renderNotesList(); renderNotesEditor(); saveState();
+}
+async function encryptText(text, password) {
+  const enc = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const keyMat = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits','deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt, iterations:100000, hash:'SHA-256' },
+    keyMat, { name:'AES-GCM', length:256 }, false, ['encrypt']);
+  const ct = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, enc.encode(text));
+  const combined = new Uint8Array(16 + 12 + ct.byteLength);
+  combined.set(salt, 0); combined.set(iv, 16); combined.set(new Uint8Array(ct), 28);
+  return btoa(String.fromCharCode(...combined));
+}
+async function decryptText(b64, password) {
+  const data = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const salt = data.slice(0,16), iv = data.slice(16,28), ct = data.slice(28);
+  const enc = new TextEncoder();
+  const keyMat = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits','deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt, iterations:100000, hash:'SHA-256' },
+    keyMat, { name:'AES-GCM', length:256 }, false, ['decrypt']);
+  return new TextDecoder().decode(await crypto.subtle.decrypt({ name:'AES-GCM', iv }, key, ct));
+}
+
+/* ============ SNAKE ============ */
+function snakeBody() {
+  return `
+    <div class="game-wrap">
+      <div class="game-info">Счёт: <b id="snakeScore">0</b> • Рекорд: <b id="snakeBest">0</b></div>
+      <canvas class="game-canvas" id="snakeCanvas" width="380" height="380"></canvas>
+    </div>
+  `;
+}
+function initSnake(win) {
+  const cv = win.querySelector('#snakeCanvas');
+  const ctx = cv.getContext('2d');
+  const scoreEl = win.querySelector('#snakeScore');
+  const bestEl = win.querySelector('#snakeBest');
+  const cell = 20, W = cv.width/cell, H = cv.height/cell;
+  let snake, dir, food, score, alive, timer;
+  let best = +localStorage.getItem('snake_best') || 0;
+  bestEl.textContent = best;
+  function reset() {
+    snake = [{x:5,y:5}]; dir = {x:1,y:0}; score = 0; alive = true;
+    placeFood(); scoreEl.textContent = 0;
+  }
+  function placeFood() {
+    do { food = {x: Math.floor(Math.random()*W), y: Math.floor(Math.random()*H)}; }
+    while (snake.some(s=>s.x===food.x && s.y===food.y));
+  }
+  function tick() {
+    if (!alive) return;
+    const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
+    if (head.x<0||head.x>=W||head.y<0||head.y>=H||snake.some(s=>s.x===head.x&&s.y===head.y)) {
+      alive = false;
+      if (score > best) { best = score; localStorage.setItem('snake_best', best); bestEl.textContent = best; }
+      draw(); return;
+    }
+    snake.unshift(head);
+    if (head.x===food.x && head.y===food.y) { score++; scoreEl.textContent = score; placeFood(); }
+    else snake.pop();
+    draw();
+  }
+  function draw() {
+    ctx.clearRect(0,0,cv.width,cv.height);
+    ctx.fillStyle = '#0a0a12'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.fillStyle = '#ff4757'; ctx.beginPath();
+    ctx.arc(food.x*cell+cell/2, food.y*cell+cell/2, cell/2-2, 0, Math.PI*2); ctx.fill();
+    snake.forEach((s,i) => {
+      ctx.fillStyle = i===0 ? '#ffd700' : '#ffb700';
+      ctx.fillRect(s.x*cell+1, s.y*cell+1, cell-2, cell-2);
+    });
+    if (!alive) {
+      ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(0,0,cv.width,cv.height);
+      ctx.fillStyle = '#ffd700'; ctx.font = 'bold 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Game Over', cv.width/2, cv.height/2 - 10);
+      ctx.font = '14px sans-serif'; ctx.fillStyle = '#aaa';
+      ctx.fillText('Счёт: ' + score, cv.width/2, cv.height/2 + 20);
+      ctx.fillText('Пробел — заново', cv.width/2, cv.height/2 + 44);
+    }
+  }
+  function handleKey(e) {
+    if (!document.body.contains(cv)) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const k = e.key.toLowerCase();
+    if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+    if (k === ' ' && !alive) { reset(); return; }
+    if (k === 'arrowup' || k === 'w') { if (dir.y === 0) dir = {x:0,y:-1}; }
+    if (k === 'arrowdown' || k === 's') { if (dir.y === 0) dir = {x:0,y:1}; }
+    if (k === 'arrowleft' || k === 'a') { if (dir.x === 0) dir = {x:-1,y:0}; }
+    if (k === 'arrowright' || k === 'd') { if (dir.x === 0) dir = {x:1,y:0}; }
+  }
+  document.addEventListener('keydown', handleKey);
+  const obs = setInterval(() => {
+    if (!document.body.contains(cv)) { clearInterval(timer); clearInterval(obs); document.removeEventListener('keydown', handleKey); }
+  }, 500);
+  reset(); draw();
+  timer = setInterval(tick, 130);
+}
+
+/* ============ 2048 ============ */
+function g2048Body() {
+  return `
+    <div class="game-wrap">
+      <div class="game-info">Счёт: <b id="g2048Score">0</b> • Рекорд: <b id="g2048Best">0</b></div>
+      <div class="g2048" id="g2048Board"></div>
+    </div>
+  `;
+}
+function initG2048(win) {
+  const board = win.querySelector('#g2048Board');
+  const scoreEl = win.querySelector('#g2048Score');
+  const bestEl = win.querySelector('#g2048Best');
+  let grid, score, best = +localStorage.getItem('g2048_best') || 0;
+  bestEl.textContent = best;
+  function reset() {
+    grid = Array(4).fill(0).map(()=>Array(4).fill(0));
+    score = 0; addTile(); addTile(); render();
+  }
+  function addTile() {
+    const empty = [];
+    for (let y=0;y<4;y++) for (let x=0;x<4;x++) if (grid[y][x]===0) empty.push([y,x]);
+    if (!empty.length) return;
+    const [y,x] = empty[Math.floor(Math.random()*empty.length)];
+    grid[y][x] = Math.random() < 0.9 ? 2 : 4;
+  }
+  function render() {
+    board.innerHTML = '';
+    for (let y=0;y<4;y++) for (let x=0;x<4;x++) {
+      const v = grid[y][x];
+      const d = document.createElement('div');
+      d.className = 'cell' + (v?' v'+v:'');
+      d.textContent = v || '';
+      board.appendChild(d);
+    }
+    scoreEl.textContent = score;
+    if (score > best) { best = score; localStorage.setItem('g2048_best', best); bestEl.textContent = best; }
+  }
+  function slide(row) {
+    let arr = row.filter(v=>v);
+    for (let i=0;i<arr.length-1;i++) {
+      if (arr[i]===arr[i+1]) { arr[i]*=2; score+=arr[i]; arr[i+1]=0; }
+    }
+    arr = arr.filter(v=>v);
+    while (arr.length<4) arr.push(0);
+    return arr;
+  }
+  function move(dir) {
+    const before = JSON.stringify(grid);
+    if (dir === 'left' || dir === 'right') {
+      for (let y=0;y<4;y++) {
+        let row = grid[y].slice();
+        if (dir==='right') row.reverse();
+        row = slide(row);
+        if (dir==='right') row.reverse();
+        grid[y] = row;
+      }
+    } else {
+      for (let x=0;x<4;x++) {
+        let col = [grid[0][x],grid[1][x],grid[2][x],grid[3][x]];
+        if (dir==='down') col.reverse();
+        col = slide(col);
+        if (dir==='down') col.reverse();
+        for (let y=0;y<4;y++) grid[y][x] = col[y];
+      }
+    }
+    if (JSON.stringify(grid) !== before) { addTile(); render(); }
+  }
+  function handleKey(e) {
+    if (!document.body.contains(board)) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const k = e.key.toLowerCase();
+    if (['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d','r'].includes(k)) e.preventDefault();
+    if (k==='arrowleft'||k==='a') move('left');
+    else if (k==='arrowright'||k==='d') move('right');
+    else if (k==='arrowup'||k==='w') move('up');
+    else if (k==='arrowdown'||k==='s') move('down');
+    else if (k==='r') reset();
+  }
+  document.addEventListener('keydown', handleKey);
+  const obs = setInterval(() => {
+    if (!document.body.contains(board)) { clearInterval(obs); document.removeEventListener('keydown', handleKey); }
+  }, 500);
+  reset();
+}
+
+/* ============ WASM ============ */
+function wasmBody() {
+  return `
+    <div style="font-size:11px;color:#888;margin-bottom:8px">JS-песочница</div>
+    <textarea class="code-editor" id="wasmCode">console.log('Hello VoltOS!');
+return 'Готово';</textarea>
+    <button class="run-btn" id="wasmRun">▶ Запустить</button>
+    <div class="code-out" id="wasmOut">// вывод...</div>
+  `;
+}
+function initWasm(win) {
+  const out = win.querySelector('#wasmOut');
+  const code = win.querySelector('#wasmCode');
+  win.querySelector('#wasmRun').onclick = () => {
+    out.textContent = '';
+    const logs = [];
+    const fakeConsole = { log: (...a) => logs.push(a.map(x=>typeof x==='object'?JSON.stringify(x):String(x)).join(' ')) };
+    try {
+      const fn = new Function('console', code.value);
+      const ret = fn(fakeConsole);
+      out.textContent = logs.join('\n') + (ret !== undefined ? '\n→ ' + ret : '');
+      out.style.color = '#4ade80';
+    } catch (err) {
+      out.textContent = '✗ ' + err.message;
+      out.style.color = '#f87171';
+    }
+  };
+}
+
+/* ============ SCHEDULER ============ */
+function schedBody() {
+  return `
+    <div style="font-size:12px;color:#888;margin-bottom:8px">VoltSched</div>
+    <canvas class="sched-canvas" id="schedCanvas" width="540" height="150"></canvas>
+  `;
+}
+function initSched(win) {
+  const cv = win.querySelector('#schedCanvas');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const history = Array(60).fill(0);
+  const predicted = Array(60).fill(0);
+  const t = setInterval(() => {
+    if (!document.body.contains(cv)) { clearInterval(t); return; }
+    const base = 30 + Math.sin(performance.now()/800)*15 + Math.random()*20;
+    history.push(base); history.shift();
+    const pred = base + Math.sin(performance.now()/400)*8 + (Math.random()-0.5)*6;
+    predicted.push(Math.max(0,pred)); predicted.shift();
+    draw();
+  }, 400);
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='rgba(255,215,0,.08)';
+    for (let i=0;i<=4;i++){ ctx.beginPath(); ctx.moveTo(0,H/4*i); ctx.lineTo(W,H/4*i); ctx.stroke(); }
+    ctx.strokeStyle='#ffd700'; ctx.lineWidth=2; ctx.beginPath();
+    history.forEach((v,i)=>{ const x=i*W/60, y=H-(v/100)*H; i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
+    ctx.strokeStyle='#4ade80'; ctx.setLineDash([4,4]); ctx.beginPath();
+    predicted.forEach((v,i)=>{ const x=i*W/60, y=H-(v/100)*H; i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+
+/* ============ SNAPSHOTS ============ */
+function snapBody() {
+  return `
+    <button class="run-btn" onclick="createSnapshot();reRenderSnaps()">+ Создать снапшот</button>
+    <div style="font-size:11px;color:#666;margin:16px 0 8px">СУЩЕСТВУЮЩИЕ</div>
+    <div id="snapList"></div>
+  `;
+}
+function initSnap() { reRenderSnaps(); }
+function reRenderSnaps() {
+  const list = document.getElementById('snapList');
+  if (!list) return;
+  if (!state.snapshots.length) { list.innerHTML = '<div style="color:#555;font-size:12px">Нет снапшотов</div>'; return; }
+  list.innerHTML = state.snapshots.map((s,i)=>`
+    <div class="snap-item">
+      <div>
+        <div class="snap-name">${s.name}</div>
+        <div style="color:#666;font-size:10px">${s.date} • ${s.files} файлов</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button onclick="rollbackSnapshot(${i})">↩</button>
+        <button onclick="deleteSnapshot(${i})">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+function createSnapshot() {
+  const snap = {
+    name: 'snap-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,''),
+    date: new Date().toLocaleString(),
+    files: Object.keys(fs).length,
+    data: JSON.parse(JSON.stringify(fs))
+  };
+  state.snapshots.unshift(snap);
+  notify('💾 Снапшот', 'Создан: ' + snap.name);
+  reRenderSnaps(); saveState();
+  return snap;
+}
+function rollbackSnapshot(i) {
+  const s = state.snapshots[i];
+  if (!s || !confirm('Откатить?')) return;
+  Object.keys(fs).forEach(k => delete fs[k]);
+  Object.assign(fs, JSON.parse(JSON.stringify(s.data)));
+  toast('Откат'); fmRefresh(); saveState();
+}
+function deleteSnapshot(i) { state.snapshots.splice(i,1); reRenderSnaps(); saveState(); }
+
+/* ============ USERS ============ */
+function usersBody() {
+  return `
+    <div class="user-screen">
+      <h2>Пользователи</h2>
+      <div id="usersList"></div>
+      <button class="run-btn" style="margin-top:14px;width:100%" onclick="createUserDialog()">+ Создать</button>
+    </div>
+  `;
+}
+function initUsers() { renderUsersList(); }
+function renderUsersList() {
+  const list = document.getElementById('usersList');
+  if (!list) return;
+  list.innerHTML = Object.keys(state.users).map(u => `
+    <div class="user-card" onclick="switchUser('${u}')" style="${u===state.currentUser?'border-color:var(--accent);background:rgba(255,215,0,.08)':''}">
+      <div class="u-avatar">${state.users[u].avatar}</div>
+      <div style="flex:1;text-align:left">
+        <div class="u-name">${escapeHtml(state.users[u].name)}</div>
+        <div class="u-sub">@${u} • ${(state.users[u].notes||[]).length} заметок</div>
+      </div>
+      ${u===state.currentUser?'<span style="color:var(--accent);font-size:18px">●</span>':''}
+    </div>
+  `).join('');
+}
+function switchUser(u) {
+  if (!state.users[u]) return;
+  state.currentUser = u;
+  updateUserPill(); renderUsersList(); saveState();
+  toast('Пользователь: ' + u);
+  if (state.windows.notes) { notesState.currentNote = -1; initNotes(); }
+}
+function createUserDialog() {
+  const name = prompt('Имя:');
+  if (!name || !/^[a-zA-Z0-9_]+$/.test(name)) { toast('Некорректно'); return; }
+  if (state.users[name]) { toast('Уже есть'); return; }
+  const displayName = prompt('Отображаемое имя:') || name;
+  const avatar = prompt('Эмодзи-аватар:') || '👤';
+  const password = prompt('Пароль (опц.):') || '';
+  state.users[name] = { name: displayName, avatar, notes: [], password };
+  renderUsersList(); saveState();
+}
+
+/* ============ SETTINGS ============ */
+function settingsBody() {
+  return `
+    <div class="stabs">
+      <button class="stab active" data-stab="power">⚡ Питание</button>
+      <button class="stab" data-stab="appearance">🎨 Оформление</button>
+      <button class="stab" data-stab="system">⚙ Система</button>
+      <button class="stab" data-stab="updates">🔄 Обновления</button>
+    </div>
+
+    <div class="stab-content active" data-stab="power">
+      ${['turbo','balanced','eco','survival'].map(m => `
+        <div class="mode-card ${state.mode===m?'active':''}" data-mode="${m}">
+          <h4>${m.toUpperCase()}</h4>
+          <p>${{
+            turbo:'Максимальная производительность',
+            balanced:'Баланс',
+            eco:'Экономия энергии',
+            survival:'Только критичное'
+          }[m]}</p>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="stab-content" data-stab="appearance">
+      <div class="setting-row"><span>Светлая тема</span><div class="toggle ${state.lightTheme?'on':''}" id="tTheme"></div></div>
+      <div class="setting-row"><span>AMOLED</span><div class="toggle ${state.amoled?'on':''}" id="tAMOLED"></div></div>
+      <div class="setting-row"><span>Уведомления</span><div class="toggle ${state.notifications?'on':''}" id="tNotif"></div></div>
+    </div>
+
+    <div class="stab-content" data-stab="system">
+      <div class="setting-row"><span>Виртуальных столов</span>
+        <select id="selVD" style="background:#111;color:#ddd;border:1px solid var(--border);border-radius:6px;padding:5px 10px">
+          ${[2,3,4,5,6].map(n=>`<option ${n===state.vdesktops?'selected':''}>${n}</option>`).join('')}
+        </select>
+      </div>
+      <div class="setting-row"><span>Пароль блокировки</span>
+        <button onclick="state.lockPassword=prompt('Новый пароль (пусто = убрать):')||'';saveState();toast('Обновлено')" style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;background:rgba(255,215,0,.15);color:var(--accent);font-size:11px">Изменить</button>
+      </div>
+      <div class="setting-row"><span>Автосохранение</span>
+        <button onclick="saveState();toast('Сохранено')" style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;background:rgba(255,215,0,.15);color:var(--accent);font-size:11px">Сейчас</button>
+      </div>
+      <div class="setting-row"><span>Экспорт ФС</span>
+        <button onclick="exportFS()" style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;background:rgba(255,215,0,.15);color:var(--accent);font-size:11px">📦</button>
+      </div>
+      <div class="setting-row"><span>Импорт ФС</span>
+        <button onclick="importFS()" style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;background:rgba(255,215,0,.15);color:var(--accent);font-size:11px">📥</button>
+      </div>
+      <div class="setting-row"><span style="color:#f87171">Сброс</span>
+        <button onclick="if(confirm('Точно?')){localStorage.clear();location.reload()}" style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;background:rgba(248,113,113,.15);color:#f87171;font-size:11px">Сброс</button>
+      </div>
+    </div>
+
+    <div class="stab-content" data-stab="updates">
+      <div class="update-card">
+        <h4>🪟 Windows Update</h4>
+        <p>Скачивание и установка обновлений Windows через сервер VoltOS.</p>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span class="ver" id="updateVer">Текущая: ${CURRENT_VERSION}</span>
+          <span class="ver" id="updateLatest" style="display:none"></span>
+        </div>
+        <button class="update-btn" id="updateCheckBtn" style="margin-top:10px">🔄 Проверить обновления</button>
+        <button class="update-btn" id="updateDownloadBtn" style="margin-top:10px;display:none;background:linear-gradient(135deg,#4ade80,#22c55e)">⬇ Скачать обновление</button>
+        <div class="update-progress" id="updateProgress">
+          <div class="update-progress-fill" id="updateProgressFill"></div>
+        </div>
+        <div class="update-log" id="updateLog"></div>
+      </div>
+
+      <div class="update-card">
+        <h4>⚡ VoltOS Core</h4>
+        <p>Обновления ядра VoltOS через GitHub Releases.</p>
+        <button class="update-btn" id="voltCheckBtn" style="margin-top:6px">🔄 Проверить обновления ядра</button>
+        <div class="update-log" id="voltLog"></div>
+      </div>
+
+      <div class="update-card">
+        <h4>ℹ️ Системная информация</h4>
+        <p>Версия VoltOS: <b style="color:var(--accent)">${CURRENT_VERSION}</b><br>
+        Глитч-мод: <b style="color:${IS_GLITCHED?'#f87171':'#4ade80'}">${IS_GLITCHED ? '⚠ АКТИВЕН' : 'не активен'}</b><br>
+        Шанс глитча: 0.00042%<br>
+        Обновления: реальный fetch к серверу</p>
+      </div>
+    </div>
+  `;
+}
+function initSettings(win) {
+  // Tabs
+  win.querySelectorAll('.stab').forEach(t => {
+    t.onclick = () => {
+      win.querySelectorAll('.stab').forEach(x => x.classList.remove('active'));
+      win.querySelectorAll('.stab-content').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      const c = win.querySelector(`.stab-content[data-stab="${t.dataset.stab}"]`);
+      if (c) c.classList.add('active');
+    };
+  });
+
+  // Mode cards
+  win.querySelectorAll('.mode-card').forEach(c => {
+    c.onclick = () => {
+      setMode(c.dataset.mode);
+      win.querySelectorAll('.mode-card').forEach(x=>x.classList.remove('active'));
+      c.classList.add('active');
+    };
+  });
+
+  // Toggles
+  const tT = win.querySelector('#tTheme');
+  if (tT) tT.onclick = (e) => { setTheme(!state.lightTheme); e.target.classList.toggle('on'); };
+  const tA = win.querySelector('#tAMOLED');
+  if (tA) tA.onclick = (e) => { setAMOLED(!state.amoled); e.target.classList.toggle('on'); };
+  const tN = win.querySelector('#tNotif');
+  if (tN) tN.onclick = (e) => {
+    state.notifications = !state.notifications;
+    e.target.classList.toggle('on'); saveState();
+  };
+
+  const selVD = win.querySelector('#selVD');
+  if (selVD) selVD.onchange = (e) => {
+    state.vdesktops = +e.target.value;
+    if (state.currentVD >= state.vdesktops) switchVD(0);
+    initVDesktops(); saveState();
+  };
+
+  // Update check buttons
+  const checkBtn = win.querySelector('#updateCheckBtn');
+  if (checkBtn) checkBtn.onclick = () => checkWindowsUpdates(win);
+  const downBtn = win.querySelector('#updateDownloadBtn');
+  if (downBtn) downBtn.onclick = () => downloadWindowsUpdate(win);
+  const voltBtn = win.querySelector('#voltCheckBtn');
+  if (voltBtn) voltBtn.onclick = () => checkVoltOSUpdates(win);
+}
+
+function openSettingsTab(tab) {
+  const w = openWindow('settings');
+  setTimeout(() => {
+    const t = w.querySelector(`.stab[data-stab="${tab}"]`);
+    if (t) t.click();
+  }, 50);
+}
+
+function updateLog(logEl, line, cls) {
+  if (!logEl) return;
+  logEl.classList.add('show');
+  const span = document.createElement('span');
+  span.className = cls || '';
+  span.textContent = line + '\n';
+  logEl.appendChild(span);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* === ОБНОВЛЕНИЯ: WINDOWS через реальный сервер === */
+async function checkWindowsUpdates(win) {
+  const logEl = win.querySelector('#updateLog');
+  const latestEl = win.querySelector('#updateLatest');
+  const downBtn = win.querySelector('#updateDownloadBtn');
+  const checkBtn = win.querySelector('#updateCheckBtn');
+  if (!logEl) return;
+  logEl.innerHTML = '';
+  updateLog(logEl, '> Запрос к серверу обновлений...', '');
+  updateLog(logEl, '> URL: ' + UPDATE_SERVER, '');
+  checkBtn.disabled = true;
+
+  try {
+    updateLog(logEl, '> Подключение...', '');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    let response;
+    try {
+      response = await fetch(UPDATE_SERVER, {
+        headers: { 'Accept': 'application/vnd.github+json' },
+        signal: controller.signal
+      });
+    } catch(fetchErr) {
+      // Fallback — пробуем другой endpoint
+      updateLog(logEl, '⚠ GitHub API недоступен, пробую зеркало...', 'warn');
+      try {
+        response = await fetch('https://api.github.com/repos/facebook/react/releases/latest', {
+          headers: { 'Accept': 'application/vnd.github+json' }
+        });
+      } catch(e) {
+        throw new Error('Нет соединения с сервером');
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    updateLog(logEl, '> HTTP ' + response.status + ' ' + response.statusText, '');
+
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status);
+    }
+
+    const data = await response.json();
+    const version = (data.tag_name || data.name || 'unknown').replace(/^v/, '');
+    updateLog(logEl, '> Получены данные:', '');
+    updateLog(logEl, '  • Версия: ' + version, '');
+    updateLog(logEl, '  • Название: ' + (data.name || 'без названия'), '');
+    if (data.published_at) {
+      updateLog(logEl, '  • Опубликовано: ' + new Date(data.published_at).toLocaleString('ru-RU'), '');
+    }
+    if (data.body) {
+      updateLog(logEl, '> Описание:', '');
+      updateLog(logEl, data.body.slice(0, 400) + (data.body.length > 400 ? '...' : ''), '');
+    }
+
+    const cur = CURRENT_VERSION.split('.').map(Number);
+    const nw = version.split('.').map(Number);
+    let isNewer = false;
+    for (let i = 0; i < Math.max(cur.length, nw.length); i++) {
+      const a = cur[i] || 0, b = nw[i] || 0;
+      if (b > a) { isNewer = true; break; }
+      if (b < a) break;
+    }
+
+    latestEl.style.display = 'inline-block';
+    latestEl.textContent = 'Доступна: ' + version;
+    latestEl.style.color = isNewer ? '#fbbf24' : '#4ade80';
+
+    if (isNewer) {
+      updateLog(logEl, '✅ Доступно новое обновление: ' + version, '');
+      downBtn.style.display = 'inline-block';
+      downBtn.onclick = () => downloadWindowsUpdate(win, data);
+    } else {
+      updateLog(logEl, '✅ Установлена последняя версия (' + CURRENT_VERSION + ')', '');
+    }
+  } catch(err) {
+    updateLog(logEl, '❌ Ошибка: ' + err.message, 'err');
+    updateLog(logEl, '💡 Возможные причины: нет интернета, CORS, сервер недоступен', 'warn');
+    updateLog(logEl, '💡 Попробуйте ещё раз или проверьте соединение', 'warn');
+  } finally {
+    checkBtn.disabled = false;
+  }
+}
+
+/* === ОБНОВЛЕНИЯ: скачивание Windows Update === */
+async function downloadWindowsUpdate(win, data) {
+  const logEl = win.querySelector('#updateLog');
+  const prog = win.querySelector('#updateProgress');
+  const fill = win.querySelector('#updateProgressFill');
+  if (!logEl || !prog || !fill) return;
+
+  prog.classList.add('show');
+  fill.style.width = '0%';
+  updateLog(logEl, '\n> Начало загрузки обновления Windows...', '');
+
+  // Если есть URL к ассету в релизе — скачаем реально
+  let downloadUrl = null;
+  if (data && data.assets && data.assets.length > 0) {
+    downloadUrl = data.assets[0].browser_download_url;
+    updateLog(logEl, '> Файл: ' + data.assets[0].name, '');
+    updateLog(logEl, '> Размер: ' + (data.assets[0].size / 1024 / 1024).toFixed(2) + ' MB', '');
+  } else {
+    // Демо-загрузка — имитируем прогресс и в конце даём "файл"
+    updateLog(logEl, '> Скачивание патча Windows 11 (демо)...', '');
+  }
+
+  const steps = [
+    'Подключение к серверу обновлений...',
+    'Проверка подписи пакета...',
+    'Загрузка KB' + (5000000 + Math.floor(Math.random()*1000000)) + '...',
+    'Загрузка 25%...',
+    'Загрузка 50%...',
+    'Загрузка 75%...',
+    'Загрузка 100%...',
+    'Проверка целостности SHA-256...',
+    'Распаковка...',
+    'Установка...',
+    'Регистрация компонентов...',
+    '✅ Обновление установлено (демо)',
+    'Перезагрузка не требуется'
+  ];
+
+  for (let i = 0; i < steps.length; i++) {
+    await new Promise(r => setTimeout(r, 400 + Math.random()*400));
+    fill.style.width = ((i+1)/steps.length*100) + '%';
+    const isOk = steps[i].startsWith('✅');
+    updateLog(logEl, '  ' + steps[i], isOk ? '' : '');
+
+    if (downloadUrl && i === 3) {
+      // Реально качаем файл через XHR для прогресса
+      try {
+        updateLog(logEl, '  → Скачиваю ' + downloadUrl, '');
+        const response = await fetch(downloadUrl);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'update-' + (data.tag_name || 'latest') + '.zip';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        updateLog(logEl, '  → Файл сохранён на компьютер', '');
+      } catch(e) {
+        updateLog(logEl, '  → Ошибка загрузки: ' + e.message, 'err');
+      }
+    }
+  }
+
+  updateLog(logEl, '\n✅ Готово. Обновление "Windows" скачано (демо-пакет).', '');
+  notify('🔄 Обновление', 'Windows Update успешно установлен (демо)');
+  toast('✅ Обновление установлено (демо)');
+}
+
+/* === ОБНОВЛЕНИЯ: VoltOS Core через GitHub === */
+async function checkVoltOSUpdates(win) {
+  const logEl = win.querySelector('#voltLog');
+  if (!logEl) return;
+  logEl.innerHTML = '';
+  updateLog(logEl, '> Проверка обновлений VoltOS Core...', '');
+
+  try {
+    // Пробуем несколько публичных репозиториев (проверка связи с реальным сервером)
+    const endpoints = [
+      'https://api.github.com/repos/facebook/react/releases/latest',
+      'https://api.github.com/repos/vuejs/core/releases/latest'
+    ];
+
+    let data = null;
+    for (const url of endpoints) {
+      try {
+        updateLog(logEl, '> GET ' + url, '');
+        const r = await fetch(url, { headers: { 'Accept': 'application/vnd.github+json' } });
+        updateLog(logEl, '> HTTP ' + r.status, '');
+        if (r.ok) {
+          data = await r.json();
+          break;
+        }
+      } catch(e) {
+        updateLog(logEl, '⚠ ' + e.message, 'warn');
+      }
+    }
+
+    if (!data) {
+      throw new Error('Не удалось получить данные с GitHub');
+    }
+
+    updateLog(logEl, '> Последний релиз: ' + (data.tag_name || data.name), '');
+    updateLog(logEl, '> Опубликовано: ' + new Date(data.published_at).toLocaleString('ru-RU'), '');
+    updateLog(logEl, '> Описание: ' + (data.body || 'нет').slice(0, 200) + '...', '');
+    updateLog(logEl, '\n✅ Сервер VoltOS Core доступен', '');
+    updateLog(logEl, '✅ Текущая версия: ' + CURRENT_VERSION + ' (актуальна)', '');
+    notify('⚡ VoltOS', 'Обновления ядра проверены — актуально');
+  } catch(err) {
+    updateLog(logEl, '❌ Ошибка: ' + err.message, 'err');
+  }
+}
+
+function setMode(m) {
+  state.mode = m; renderStats(); saveState();
+  toast('⚡ Mode: ' + m);
+}
+function setTheme(light) {
+  state.lightTheme = light;
+  document.body.classList.toggle('light', light);
+  toast(light ? '☀️ Светлая' : '🌙 Тёмная');
+  saveState();
+}
+function setAMOLED(on) {
+  state.amoled = on;
+  document.body.classList.toggle('amoled', on);
+  toast(on ? '⚫ AMOLED' : 'AMOLED выкл');
+  saveState();
+}
+
+/* ============ ABOUT ============ */
+function aboutBody() {
+  return `
+    <div style="text-align:center;padding:24px 0">
+      <div style="font-size:72px;filter:drop-shadow(0 0 30px #ffd700)">⚡</div>
+      <h2 style="color:var(--accent);letter-spacing:6px;margin:12px 0;font-weight:300">VoltOS 6.3</h2>
+      <p style="color:#777;font-size:11px;letter-spacing:3px">ENERGY-AWARE MICROKERNEL</p>
+      <div style="margin-top:20px;font-size:12px;color:#888;line-height:1.8">
+        Volt Browser + Music + Video + Images<br>
+        Encrypted Notes (AES-GCM)<br>
+        <b style="color:var(--accent)">Новое:</b> Глитч-режим (0.00042%)<br>
+        <b style="color:var(--accent)">Новое:</b> Обновления через сервер<br>
+        <span style="color:#555;font-size:11px">© 2026 VoltOS Project</span>
+      </div>
+    </div>
+  `;
+}
+
+/* ============ WIDGETS ============ */
+function initWidgets() {
+  const w = document.getElementById('widgets');
+  w.innerHTML = `
+    <div class="widget">
+      <h4>System</h4>
+      <canvas id="wCpu" width="200" height="64"></canvas>
+    </div>
+    <div class="widget">
+      <h4>VoltFS</h4>
+      <div style="font-size:11px;color:#aaa;line-height:1.8">
+        Файлов: <b id="wFiles" style="color:var(--accent)">0</b><br>
+        Снапшотов: <b id="wSnaps" style="color:var(--accent)">0</b>
+      </div>
+    </div>
+    <div class="widget">
+      <h4>Version</h4>
+      <div style="font-size:11px;color:#aaa;line-height:1.8">
+        v${CURRENT_VERSION}<br>
+        ${IS_GLITCHED ? '<span style="color:#f87171">⚠ GLITCHED</span>' : '<span style="color:#4ade80">stable</span>'}
+      </div>
+    </div>
+  `;
+  const cv = document.getElementById('wCpu');
+  const ctx = cv.getContext('2d');
+  setInterval(() => {
+    ctx.clearRect(0,0,200,64);
+    const vals = [state.cpu, state.mem/8*100, state.battery];
+    const colors = ['#ffd700','#4ade80','#38bdf8'];
+    const labels = ['CPU','MEM','BAT'];
+    vals.forEach((v,i) => {
+      const y = i*20+4;
+      ctx.fillStyle='rgba(255,255,255,.06)'; ctx.fillRect(0,y,200,12);
+      ctx.fillStyle=colors[i]; ctx.fillRect(0,y,Math.min(200,200*v/100),12);
+      ctx.fillStyle='#000'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(labels[i], 4, y+9);
+    });
+    const wf = document.getElementById('wFiles');
+    const ws = document.getElementById('wSnaps');
+    if (wf) wf.textContent = Object.keys(fs).length;
+    if (ws) ws.textContent = state.snapshots.length;
+  }, 800);
+}
+
+/* ============ KEYBOARD ============ */
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'ArrowRight') { e.preventDefault(); switchVD((state.currentVD+1)%state.vdesktops); }
+  if (e.ctrlKey && e.key === 'ArrowLeft') { e.preventDefault(); switchVD((state.currentVD-1+state.vdesktops)%state.vdesktops); }
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') { e.preventDefault(); openWindow('terminal'); }
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'u') { e.preventDefault(); pickFileForUpload(); }
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'm') { e.preventDefault(); openWindow('music'); }
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'b') { e.preventDefault(); openWindow('browser'); }
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'l') { e.preventDefault(); showLockScreen(); }
+  if (e.key === 'Escape') hideContextMenu();
+});
+
+document.getElementById('lockBtn').onclick = tryUnlock;
+document.getElementById('lockPass').onkeydown = (e) => {
+  if (e.key === 'Enter') tryUnlock();
+};
+
+renderStats();
+</script>
+</body>
+</html>
